@@ -46,6 +46,9 @@ def tailor_resume(resume_text, job_description):
     If the job is Remote or in New York, keep the location header as: "New York, USA".
     Set the main resume title to match the exact target position title from the JD.
 
+    - Keep the candidate's actual job titles intact inside professional_experience (e.g., "Digital Marketing Specialist" or "Marketing Analytics Lead"). DO NOT overwrite past or current employment job titles with the target JD title.
+- You may only reflect the target JD position title inside the Professional Summary text.
+
     2. Comprehensive Keyword Gap Audit & Integration:
     Categorical Gap Scan: Perform an internal scan comparing the JD against the master resume across four distinct buckets:
     Platforms & Tools: (e.g., Marketo, Databricks, Postman, Adobe Analytics, SFMC).
