@@ -8,7 +8,7 @@ from xhtml2pdf import pisa
 
 # --- CONFIGURATION ---
 # Replace this placeholder with your actual Gemini API Key from Google AI Studio
-GEMINI_API_KEY = "AQ.Ab8RN6JJ3j_mvpGLS-hp11ZzB_wXDNwKPp79PNx7SayBXoBX0g"
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
