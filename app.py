@@ -1,14 +1,5 @@
-import sys
-import subprocess
-
-# --- FOOLPROOF AUTO-INSTALLER ---
-# Forces the active Python engine running Streamlit to automatically install PyPDF2 if missing
-try:
-    import PyPDF2
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyPDF2"])
-
 import streamlit as st
+import PyPDF2
 import io
 import json
 from google import genai
@@ -42,48 +33,38 @@ def tailor_resume(resume_text, job_description):
     Optimize it against this Job Description:
     {job_description}
     
-    CANDIDATE INFO:- Name: Sri Charan Ravva- Email: Sricharan.ravva07@gmail.com- Phone: 616-439-0213- Current Location: New York, USA- LinkedIn: www.linkedin.com/in/charanravva
+    CANDIDATE INFO:
+    - Name: Sri Charan Ravva
+    - Email: Sricharan.ravva07@gmail.com
+    - Phone: 616-439-0213
+    - Current Location: New York, USA
+    - LinkedIn: www.linkedin.com/in/charanravva
 
+    1. Dynamic Location & Header Alignment:
+    Check the Job Description (JD) for work setup (Remote, Hybrid, or Onsite) and job location.
+    If the job is Hybrid or Onsite outside New York, set the location header to the exact location mentioned in the JD.
+    If the job is Remote or in New York, keep the location header as: "New York, USA".
+    Set the main resume title to match the exact target position title from the JD.
 
-1. Dynamic Location & Header Alignment:
+    2. Comprehensive Keyword Gap Audit & Integration:
+    Categorical Gap Scan: Perform an internal scan comparing the JD against the master resume across four distinct buckets:
+    Platforms & Tools: (e.g., Marketo, Databricks, Postman, Adobe Analytics, SFMC).
+    Languages & Scripting: (e.g., HTML, CSS, JavaScript, AMPScript, SQL, Python).
+    Methodologies & Processes: (e.g., QA Testing, Data Signal Activation, Lead Scoring, Campaign Lifecycle).
+    Domain Terminology: (e.g., Pipeline Velocity, Multi-touch Attribution, MQL-to-SQL Conversion).
 
-Check the Job Description (JD) for work setup (Remote, Hybrid, or Onsite) and job location.
+    Technical Skills Section Injection: Every missing tool, language, or platform identified in the scan must be added to the appropriate line in the Technical Skills section.
+    Contextual Experience Weaving: Do not leave missing keywords solely in the skills section. Seamlessly weave each missing tool or methodology into relevant bullet points in the Professional Experience section using real contextual tasks.
 
-If the job is Hybrid or Onsite outside New York, set the location header to the exact location mentioned in the JD.
+    3. Bullet Point Enhancement & Quality Control:
+    NEVER tack JD category titles or headers onto the ends of bullet points (e.g., DO NOT write "...supporting Marketing Operations Support" or "...enhancing Marketing Tech Stack Management").
+    Weave action verbs, technical tools, and processes naturally into the body of every sentence.
+    Maintain a strict Action Verb + Context + Technical Tool + Metric/Outcome structure for every bullet point.
 
-If the job is Remote or in New York, keep the location header as: "New York, USA".
-
-Set the main resume title to match the exact target position title from the JD.
-
-2. Comprehensive Keyword Gap Audit & Integration:
-
-Categorical Gap Scan: Perform an internal scan comparing the JD against the master resume across four distinct buckets:
-
-Platforms & Tools: (e.g., Marketo, Databricks, Postman, Adobe Analytics, SFMC).
-
-Languages & Scripting: (e.g., HTML, CSS, JavaScript, AMPScript, SQL, Python).
-
-Methodologies & Processes: (e.g., QA Testing, Data Signal Activation, Lead Scoring, Campaign Lifecycle).
-
-Domain Terminology: (e.g., Pipeline Velocity, Multi-touch Attribution, MQL-to-SQL Conversion).
-
-Technical Skills Section Injection: Every missing tool, language, or platform identified in the scan must be added to the appropriate line in the Technical Skills section.
-
-Contextual Experience Weaving: Do not leave missing keywords solely in the skills section. Seamlessly weave each missing tool or methodology into relevant bullet points in the Professional Experience section using real contextual tasks.
-
-3. Bullet Point Enhancement & Quality Control:
-
-NEVER tack JD category titles or headers onto the ends of bullet points (e.g., DO NOT write "...supporting Marketing Operations Support" or "...enhancing Marketing Tech Stack Management").
-
-Weave action verbs, technical tools, and processes naturally into the body of every sentence.
-
-Maintain a strict Action Verb + Context + Technical Tool + Metric/Outcome structure for every bullet point.
-
-4. Professional Summary Customization:
-
-Rewrite the summary (4–5 sentences max) to directly reflect the target role's core responsibilities and exact title.
-
-Highlight key tech stacks, relevant years of experience, and measurable business impact.    4. Strip out any mathematical notation symbols or LaTeX formatting formatting (like '$'). Convert them entirely to standard plain text (e.g., 'A/B testing').
+    4. Professional Summary Customization:
+    Rewrite the summary (4–5 sentences max) to directly reflect the target role's core responsibilities and exact title.
+    Highlight key tech stacks, relevant years of experience, and measurable business impact. 
+    Strip out any mathematical notation symbols or LaTeX formatting (like '$'). Convert them entirely to standard plain text (e.g., 'A/B testing').
     
     You must output a single JSON object matching this exact structural schema:
     {{
@@ -125,7 +106,6 @@ Highlight key tech stacks, relevant years of experience, and measurable business
 def create_pdf(data):
     """Compiles the JSON data structure into an elegant, ATS-perfect PDF file."""
     
-    # Smart Link Routing: Parse dynamic text into a real clickable hyperlink URL
     linkedin_text = data['contact'].get('linkedin', 'LinkedIn')
     if linkedin_text.startswith('http'):
         linkedin_url = linkedin_text
@@ -174,7 +154,7 @@ def create_pdf(data):
         </table>
         """
 
-    # 4. Global HTML Template Structure matching the single-column target blueprint layout
+    # 4. Global HTML Template Structure
     html_template = f"""
     <!DOCTYPE html>
     <html>
@@ -244,7 +224,6 @@ def create_pdf(data):
     </html>
     """
     
-    # Render HTML parsing straight to raw PDF bytes in memory
     result = io.BytesIO()
     pisa_status = pisa.CreatePDF(html_template, dest=result)
     
@@ -274,19 +253,12 @@ if st.button("Tailor My Resume", type="primary", use_container_width=True):
     if uploaded_resume and job_description:
         with st.spinner("Analyzing data and generating your optimized resume document..."):
             try:
-                # Extract text strings
                 base_text = extract_text_from_pdf(uploaded_resume)
-                
-                # Run Gemini structure generation
                 result_data = tailor_resume(base_text, job_description)
-                
-                # Build the programmatic PDF
                 pdf_buffer = create_pdf(result_data)
                 
                 if pdf_buffer:
                     st.success("Resume Tailored and Formatted Successfully!")
-                    
-                    # Display extracted insights and scores
                     st.metric(label="Estimated ATS Match Score", value=result_data.get('estimated_ats_score', 'N/A'))
                     st.info(f"**Optimization Summary:** {result_data.get('explanation', '')}")
                     
@@ -298,14 +270,12 @@ if st.button("Tailor My Resume", type="primary", use_container_width=True):
                         with st.expander("❌ Omitted Keywords (Couldn't fit naturally)"):
                             st.write(", ".join(result_data.get('missing_keywords', [])))
                     
-                    # Formulate dynamic clean names for dynamic web URLs and storage
                     clean_name = result_data.get('name', 'Sri_Charan_Ravva').strip().lower().replace(" ", "_")
                     clean_company = company_name.strip().lower().replace(" ", "_")
                     
                     if not clean_company:
                         clean_company = "optimized"
                     
-                    # Download Action Button with explicit naming mapping
                     st.download_button(
                         label="⬇️ Download Optimized Resume (.pdf)",
                         data=pdf_buffer,
@@ -319,4 +289,4 @@ if st.button("Tailor My Resume", type="primary", use_container_width=True):
             except Exception as e:
                 st.error(f"An error occurred during calculation or runtime processing: {e}")
     else:
-        st.warning("Please make sure you have uploaded a resume file and provided a target job description description.")
+        st.warning("Please make sure you have uploaded a resume file and provided a target job description.")
