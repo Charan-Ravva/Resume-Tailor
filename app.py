@@ -209,7 +209,7 @@ def create_pdf(data):
     <body>
         <div class="name">{data.get('name', '')}</div>
         <div class="contact">
-            {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | <a href="{linkedin_url}">{linkedin_text}</a>
+            {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {data['contact'].get('linkedin', '')}
         </div>
         
         <div class="section-title">Summary</div>
