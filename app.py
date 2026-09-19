@@ -43,22 +43,7 @@ def tailor_resume(resume_text, job_description):
 STEP 1: TARGET FOCUS IDENTIFICATION
     Identify the 3 to 5 core themes or highest-priority keywords emphasized most in the JD (e.g., Lead Generation, CRM Systems Architecture, Pipeline Velocity, Commercial Intelligence).
 
-    STEP 2: DYNAMIC LOCATION & HEADER ALIGNMENT (HIGH PRIORITY)
-    - Extract the physical job location (City, State / Country) directly from the Job Description text (e.g., "Austin, TX", "Chicago, IL", "Boston, MA", "London, UK").
-    - IF a specific physical city/state is found in the JD: Set "contact.location" in the output JSON strictly to that extracted city/state location.
-    - IF the job is explicitly marked strictly as "Remote" OR no physical city/state is mentioned anywhere in the JD text: Set "contact.location" to "New York, USA".
-    - DO NOT default to "New York, USA" if any specific city, state, or office location is named in the JD.
-    - DO NOT alter past or current employment job titles inside professional_experience. Only reflect the target position title inside the Professional Summary.
-
-    STEP 3: KEYWORD GAP AUDIT
-    Scan the JD against the master resume across 4 buckets:
-    - Platforms & Tools (e.g., Salesforce, HubSpot, Marketo, Databricks)
-    - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
-    - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
-    - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
-    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
-
-    STEP 4: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
+    STEP 2: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
     For EACH position in professional_experience:
     1. REORDER: Move or add bullet points that directly match the JD at the start.
     Generate 7 high-impact bullets for both roles.
@@ -66,6 +51,23 @@ STEP 1: TARGET FOCUS IDENTIFICATION
     3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end or start of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
     4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
        [Strong Action Verb] + [Context & Business Task] + [Technical Tool Used] + [Quantifiable Business Outcome/Metric].
+       
+    STEP 3: DYNAMIC LOCATION & HEADER ALIGNMENT (HIGH PRIORITY)
+    - Extract the physical job location (City, State / Country) directly from the Job Description text (e.g., "Austin, TX", "Chicago, IL", "Boston, MA", "London, UK").
+    - IF a specific physical city/state is found in the JD: Set "contact.location" in the output JSON strictly to that extracted city/state location.
+    - IF the job is explicitly marked strictly as "Remote" OR no physical city/state is mentioned anywhere in the JD text: Set "contact.location" to "New York, USA".
+    - DO NOT default to "New York, USA" if any specific city, state, or office location is named in the JD.
+    - DO NOT alter past or current employment job titles inside professional_experience. Only reflect the target position title inside the Professional Summary.
+
+    STEP 4: KEYWORD GAP AUDIT
+    Scan the JD against the master resume across 4 buckets:
+    - Platforms & Tools (e.g., Salesforce, HubSpot, Marketo, Databricks)
+    - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
+    - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
+    - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
+    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
+
+
 
     STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
     Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
