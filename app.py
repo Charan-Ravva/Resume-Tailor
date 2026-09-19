@@ -211,8 +211,8 @@ def create_pdf(data):
     <body>
         <div class="name">{data.get('name', '')}</div>
         <div class="contact">
-            {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {data['contact'].get('linkedin', '')}
-        </div>
+    {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {linkedin_html}
+</div>
         
         <div class="section-title">Summary</div>
         <div class="summary">{data.get('summary', '')}</div>
