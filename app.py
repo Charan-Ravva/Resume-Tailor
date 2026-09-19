@@ -40,11 +40,18 @@ def tailor_resume(resume_text, job_description):
     - Current Location: New York, USA
     - LinkedIn: www.linkedin.com/in/charanravva
 
-    1. Dynamic Location & Header Alignment:
-    Check the Job Description (JD) for work setup (Remote, Hybrid, or Onsite) and job location.
-    If the job is Hybrid or Onsite outside New York, set the location header to the exact location mentioned in the JD.
-    If the job is Remote or in New York, keep the location header as: "New York, USA".
-    Set the main resume title to match the exact target position title from the JD.
+- Identify the 3-5 things this JD emphasizes most (repeated terms,
+terms in the title, terms listed first). This is the target focus.
+- Within each job's existing bullets, reorder them so the bullet(s)
+most relevant to the target focus come first amd add relevant bullets that match JD. 
+- In the Technical Skills section, reorder each category's list so
+tools mentioned in the JD come first. Do not delete skills, add missing skills and just reprioritize.
+
+    1. Dynamic Location Header Alignment (HIGH PRIORITY):
+       - Scan the Job Description for physical city/state/country locations (e.g., "Austin, TX", "Chicago, IL", "London, UK").
+       - If the job is Hybrid or Onsite outside New York, set the "contact.location" field in the JSON strictly to that exact location found in the JD.
+       - If the job is strictly Remote or explicitly located in New York, set "contact.location" to "New York, USA".
+       - Do NOT hardcode "New York, USA" if a different location is mentioned in the JD.
 
     - Keep the candidate's actual job titles intact inside professional_experience (e.g., "Digital Marketing Specialist" or "Marketing Analytics Lead"). DO NOT overwrite past or current employment job titles with the target JD title.
 - You may only reflect the target JD position title inside the Professional Summary text.
@@ -60,14 +67,14 @@ def tailor_resume(resume_text, job_description):
     Contextual Experience Weaving: Do not leave missing keywords solely in the skills section. Seamlessly weave each missing tool or methodology into relevant bullet points in the Professional Experience section using real contextual tasks.
 
     3. Bullet Point Enhancement & Quality Control:
-    NEVER tack JD category titles or headers onto the ends of bullet points (e.g., DO NOT write "...supporting Marketing Operations Support" or "...enhancing Marketing Tech Stack Management").
-    Weave action verbs, technical tools, and processes naturally into the body of every sentence.
+    NEVER tack JD category titles
     Maintain a strict Action Verb + Context + Technical Tool + Metric/Outcome structure for every bullet point.
 
     4. Professional Summary Customization:
     Rewrite the summary (4–5 sentences max) to directly reflect the target role's core responsibilities and exact title.
     Highlight key tech stacks, relevant years of experience, and measurable business impact. 
     Strip out any mathematical notation symbols or LaTeX formatting (like '$'). Convert them entirely to standard plain text (e.g., 'A/B testing').
+
     
     You must output a single JSON object matching this exact structural schema:
     {{
@@ -109,13 +116,14 @@ def tailor_resume(resume_text, job_description):
 def create_pdf(data):
     """Compiles the JSON data structure into an elegant, ATS-perfect PDF file."""
     
-    linkedin_text = data['contact'].get('linkedin', 'LinkedIn')
-    if linkedin_text.startswith('http'):
-        linkedin_url = linkedin_text
-    elif 'linkedin.com' in linkedin_text.lower():
-        linkedin_url = f"https://{linkedin_text}"
+   linkedin_raw = data['contact'].get('linkedin', 'www.linkedin.com/in/charanravva')
+    if linkedin_raw.startswith('http'):
+        linkedin_url = linkedin_raw
     else:
-        linkedin_url = "www.linkedin.com/in/charanravva"
+        linkedin_url = f"https://{linkedin_raw}"
+
+    # Build explicit hyperlinked text anchor
+    linkedin_html = f'<a href="{linkedin_url}">{linkedin_raw}</a>'
     
     # 1. Dynamically build Technical Skills HTML block
     skills_html = ""
