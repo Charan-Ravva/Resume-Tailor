@@ -40,40 +40,34 @@ def tailor_resume(resume_text, job_description):
     - Current Location: New York, USA
     - LinkedIn: www.linkedin.com/in/charanravva
 
-- Identify the 3-5 things this JD emphasizes most (repeated terms,
-terms in the title, terms listed first). This is the target focus.
-- Within each job's existing bullets, reorder them so the bullet(s)
-most relevant to the target focus come first amd add relevant bullets that match JD. 
-- In the Technical Skills section, reorder each category's list so
-tools mentioned in the JD come first. Do not delete skills, add missing skills and just reprioritize.
+STEP 1: TARGET FOCUS IDENTIFICATION
+    Identify the 3 to 5 core themes or highest-priority keywords emphasized most in the JD (e.g., Lead Generation, CRM Systems Architecture, Pipeline Velocity, Commercial Intelligence).
 
-    1. Dynamic Location Header Alignment (HIGH PRIORITY):
-       - Scan the Job Description for physical city/state/country locations (e.g., "Austin, TX", "Chicago, IL", "London, UK").
-       - If the job is Hybrid or Onsite outside New York, set the "contact.location" field in the JSON strictly to that exact location found in the JD.
-       - If the job is strictly Remote or explicitly located in New York, set "contact.location" to "New York, USA".
-       - Do NOT hardcode "New York, USA" if a different location is mentioned in the JD.
+    STEP 2: DYNAMIC LOCATION & HEADER ALIGNMENT
+    - Scan the Job Description for physical city/state/country locations.
+    - If the job is Hybrid or Onsite outside New York, set "contact.location" strictly to that exact location found in the JD.
+    - If the job is Remote or explicitly in New York, set "contact.location" to "New York, USA".
+    - DO NOT alter past or current job titles in the professional_experience section. Only reflect the target position title inside the Professional Summary.
 
-    - Keep the candidate's actual job titles intact inside professional_experience (e.g., "Digital Marketing Specialist" or "Marketing Analytics Lead"). DO NOT overwrite past or current employment job titles with the target JD title.
-- You may only reflect the target JD position title inside the Professional Summary text.
+    STEP 3: KEYWORD GAP AUDIT
+    Scan the JD against the master resume across 4 buckets:
+    - Platforms & Tools (e.g., Salesforce, HubSpot, Marketo, Databricks)
+    - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
+    - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
+    - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
+    Inject every missing keyword into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
 
-    2. Comprehensive Keyword Gap Audit & Integration:
-    Categorical Gap Scan: Perform an internal scan comparing the JD against the master resume across four distinct buckets:
-    Platforms & Tools: (e.g., Marketo, Databricks, Postman, Adobe Analytics, SFMC).
-    Languages & Scripting: (e.g., HTML, CSS, JavaScript, AMPScript, SQL, Python).
-    Methodologies & Processes: (e.g., QA Testing, Data Signal Activation, Lead Scoring, Campaign Lifecycle).
-    Domain Terminology: (e.g., Pipeline Velocity, Multi-touch Attribution, MQL-to-SQL Conversion).
+    STEP 4: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
+    For EACH position in professional_experience:
+    1. REORDER: Move existing bullet points that directly match the Step 1 Target Focus to the top 2 positions of that job.
+    2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords (e.g., event analysis, win/loss trend reporting, re-engaging dormant accounts).
+    3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
+    4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
+       [Strong Action Verb] + [Context & Business Task] + [Technical Tool Used] + [Quantifiable Business Outcome/Metric].
 
-    Technical Skills Section Injection: Every missing tool, language, or platform identified in the scan must be added to the appropriate line in the Technical Skills section.
-    Contextual Experience Weaving: Do not leave missing keywords solely in the skills section. Seamlessly weave each missing tool or methodology into relevant bullet points in the Professional Experience section using real contextual tasks.
+    STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
+    Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
 
-    3. Bullet Point Enhancement & Quality Control:
-    NEVER tack JD category titles
-    Maintain a strict Action Verb + Context + Technical Tool + Metric/Outcome structure for every bullet point.
-
-    4. Professional Summary Customization:
-    Rewrite the summary (4–5 sentences max) to directly reflect the target role's core responsibilities and exact title.
-    Highlight key tech stacks, relevant years of experience, and measurable business impact. 
-    Strip out any mathematical notation symbols or LaTeX formatting (like '$'). Convert them entirely to standard plain text (e.g., 'A/B testing').
 
     
     You must output a single JSON object matching this exact structural schema:
