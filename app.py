@@ -104,7 +104,7 @@ STEP 1: TARGET FOCUS IDENTIFICATION
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.2
+            temperature=0.0
         ),
     )
     return json.loads(response.text)
