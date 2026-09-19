@@ -55,13 +55,14 @@ STEP 1: TARGET FOCUS IDENTIFICATION
     - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
     - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
     - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
-    Inject every missing keyword into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
+    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
 
     STEP 4: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
     For EACH position in professional_experience:
     1. REORDER: Move existing bullet points that directly match the Step 1 Target Focus to the top 2 positions of that job.
+    Generate 6 high-impact bullets for both roles.
     2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords (e.g., event analysis, win/loss trend reporting, re-engaging dormant accounts).
-    3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
+    3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end or start of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
     4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
        [Strong Action Verb] + [Context & Business Task] + [Technical Tool Used] + [Quantifiable Business Outcome/Metric].
 
