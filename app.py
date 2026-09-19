@@ -116,7 +116,7 @@ tools mentioned in the JD come first. Do not delete skills, add missing skills a
 def create_pdf(data):
     """Compiles the JSON data structure into an elegant, ATS-perfect PDF file."""
     
-   linkedin_raw = data['contact'].get('linkedin', 'www.linkedin.com/in/charanravva')
+    linkedin_raw = data['contact'].get('linkedin', 'www.linkedin.com/in/charanravva')
     if linkedin_raw.startswith('http'):
         linkedin_url = linkedin_raw
     else:
