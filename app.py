@@ -45,7 +45,7 @@ def tailor_resume(resume_text, job_description):
     STEP 2: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
     For EACH position in professional_experience:
     1. REORDER: Move or add bullet points that directly match the JD at the start.
-    Generate 8 high-impact bullets for both roles.
+    Generate 9 high-impact bullets for both roles.
     2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords (e.g., event analysis, win/loss trend reporting, re-engaging dormant accounts).
     3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end or start of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
     4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
