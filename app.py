@@ -9,7 +9,12 @@ from google.genai import types
 from jobspy import scrape_jobs
 from xhtml2pdf import pisa
 from supabase import create_client, Client
-from duckduckgo_search import DDGS
+
+# DuckDuckGo fallback import handling
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
@@ -435,14 +440,30 @@ with tab1:
                         max_results=results_num
                     )
 
-                # 3. Merge and deduplicate
+                # 3. Merge and deduplicate current search results
                 final_jobs_df = merge_and_deduplicate_jobs([df_ats, df_jobspy])
+
+                # 4. Filter out jobs already saved in Supabase tracker
+                tracked_apps = fetch_all_applications_supabase()
+                if not tracked_apps.empty and not final_jobs_df.empty:
+                    tracked_keys = set(
+                        tracked_apps["company"].apply(normalize_text) + "_" + 
+                        tracked_apps["title"].apply(normalize_text)
+                    )
+                    
+                    final_jobs_df["check_key"] = (
+                        final_jobs_df["company"].apply(normalize_text) + "_" + 
+                        final_jobs_df["title"].apply(normalize_text)
+                    )
+                    
+                    final_jobs_df = final_jobs_df[~final_jobs_df["check_key"].isin(tracked_keys)]
+                    final_jobs_df = final_jobs_df.drop(columns=["check_key"])
 
                 if not final_jobs_df.empty:
                     st.session_state.jobs_df = final_jobs_df
-                    st.success(f"Found {len(final_jobs_df)} unique jobs (duplicates auto-removed)!")
+                    st.success(f"Found {len(final_jobs_df)} fresh, un-tracked jobs!")
                 else:
-                    st.warning(f"No jobs found matching your criteria within the {selected_timeframe.lower()}.")
+                    st.warning(f"No new untracked jobs found matching your criteria within the {selected_timeframe.lower()}.")
             except Exception as err:
                 st.error(f"Error executing scraper: {err}")
 
