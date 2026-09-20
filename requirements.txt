@@ -1,7 +1,10 @@
 streamlit
-google-genai
 pandas
-PyPDF2
-jobspy
+python-dotenv
+google-genai
+python-jobspy
+pypdf2
 xhtml2pdf
 supabase
+duckduckgo_search
+ddgs
