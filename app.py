@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import pandas as pd
 import PyPDF2
 import streamlit as st
@@ -8,6 +9,7 @@ from google.genai import types
 from jobspy import scrape_jobs
 from xhtml2pdf import pisa
 from supabase import create_client, Client
+from duckduckgo_search import DDGS
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
@@ -96,6 +98,75 @@ def delete_application_supabase(job_id, pdf_filename):
             pass
 
 
+# --- SEARCH & DEDUPLICATION HELPERS ---
+def search_direct_ats(job_title, location="United States", max_results=20):
+    """Searches direct career portals (Greenhouse, Lever, Ashby, Workday) using DuckDuckGo."""
+    ats_query = f'("{job_title}") ("{location}") (site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com)'
+    
+    jobs = []
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(ats_query, max_results=max_results))
+            for item in results:
+                url = item.get("href", "")
+                platform = "Career Portal"
+                if "greenhouse.io" in url:
+                    platform = "Greenhouse"
+                elif "lever.co" in url:
+                    platform = "Lever"
+                elif "ashbyhq.com" in url:
+                    platform = "Ashby"
+                elif "myworkdayjobs.com" in url:
+                    platform = "Workday"
+
+                jobs.append({
+                    "site": platform,
+                    "title": item.get("title", "").split(" - ")[0],
+                    "company": item.get("title", "").split(" - ")[-1] if " - " in item.get("title", "") else "Direct Employer",
+                    "location": location,
+                    "job_url": url,
+                    "description": item.get("body", ""),
+                    "date_posted": "Recent"
+                })
+    except Exception as e:
+        st.warning(f"Note on direct portal search: {e}")
+        
+    return pd.DataFrame(jobs)
+
+
+def normalize_text(text):
+    """Normalizes strings for duplicate matching."""
+    if not isinstance(text, str):
+        return ""
+    return re.sub(r'[^a-zA-Z0-9]', '', text.lower())
+
+
+def merge_and_deduplicate_jobs(df_list):
+    """Combines DataFrames and removes duplicate postings based on Company + Title."""
+    valid_dfs = [df for df in df_list if isinstance(df, pd.DataFrame) and not df.empty]
+    if not valid_dfs:
+        return pd.DataFrame()
+        
+    combined_df = pd.concat(valid_dfs, ignore_index=True)
+
+    combined_df["dedup_key"] = (
+        combined_df["company"].apply(normalize_text) + "_" + 
+        combined_df["title"].apply(normalize_text)
+    )
+
+    platform_priority = {
+        "Greenhouse": 1, "Lever": 2, "Ashby": 3, "Workday": 4, 
+        "linkedin": 5, "indeed": 6, "zip_recruiter": 7, "glassdoor": 8
+    }
+    combined_df["priority"] = combined_df["site"].map(lambda x: platform_priority.get(x, 99))
+    
+    combined_df = combined_df.sort_values(by="priority")
+    deduped_df = combined_df.drop_duplicates(subset=["dedup_key"], keep="first")
+    deduped_df = deduped_df.drop(columns=["dedup_key", "priority"], errors="ignore")
+
+    return deduped_df
+
+
 # --- SESSION STATE INITIALIZATION ---
 if "selected_jd" not in st.session_state:
     st.session_state.selected_jd = ""
@@ -109,9 +180,9 @@ if "selected_job_url" not in st.session_state:
     st.session_state.selected_job_url = ""
 
 
-# --- HELPER FUNCTIONS ---
+# --- RESUME TAILOR HELPERS ---
 def extract_text_from_pdf(uploaded_file):
-    """Extracts raw text from the uploaded PDF resume."""
+    """Extracts raw text from uploaded PDF resume."""
     pdf_reader = PyPDF2.PdfReader(uploaded_file)
     text = ""
     for page in pdf_reader.pages:
@@ -122,7 +193,7 @@ def extract_text_from_pdf(uploaded_file):
 
 
 def tailor_resume(resume_text, job_description):
-    """Sends prompt to Gemini and enforces a rigid JSON schema response."""
+    """Sends prompt to Gemini and enforces rigid JSON schema response."""
     prompt = f"""
     You are an expert technical recruiter. 
     Analyze this candidate's resume:
@@ -139,14 +210,13 @@ def tailor_resume(resume_text, job_description):
     - LinkedIn: www.linkedin.com/in/charanravva
 
     STEP 1: TARGET FOCUS IDENTIFICATION
-    Identify the 3 to 5 core themes or highest-priority keywords emphasized most in the JD (e.g., Lead Generation, CRM Systems Architecture, Pipeline Velocity, Commercial Intelligence).
+    Identify the 3 to 5 core themes or highest-priority keywords emphasized most in the JD.
 
     STEP 2: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
     For EACH position in professional_experience:
-    1. REORDER: Move or add bullet points that directly match the JD at the start.
-    Generate 9 high-impact bullets for both roles.
-    2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords (e.g., event analysis, win/loss trend reporting, re-engaging dormant accounts).
-    3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end or start of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
+    1. REORDER: Move or add bullet points that directly match the JD at the start. Generate 9 high-impact bullets for both roles.
+    2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords.
+    3. NO TACKING ON / REWRITE ENTIRELY: Rewrite the entire sentence seamlessly around the accomplishment.
     4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
        [Strong Action Verb] + [Context & Business Task] + [Technical Tool Used] + [Quantifiable Business Outcome/Metric].
        
@@ -154,22 +224,22 @@ def tailor_resume(resume_text, job_description):
     - DO NOT alter past or current employment job titles inside professional_experience. Only reflect the target position title inside the Professional Summary.
 
     STEP 4: KEYWORD GAP AUDIT
-    Scan the JD against the master resume across 4 buckets:
-    - Platforms & Tools (e.g., Salesforce, HubSpot, Marketo, Databricks)
-    - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
-    - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
-    - Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. Keywords or methodology should not be more than 15 per category.
+    Scan the JD against the master resume across 3 buckets:
+    - Platforms & Tools
+    - Languages & Scripting
+    - Methodologies & Processes
+    - Inject every missing tool and methodology into technical_skills. Reorder so tools mentioned in the JD appear FIRST.
 
     STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
-    Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
+    Rewrite summary (4–5 sentences max) to directly reflect target role title and core responsibilities. Strip out ALL LaTeX symbols.
 
-    You must output a single JSON object matching this exact structural schema:
+    Output a single JSON object matching this schema:
     {{
       "name": "Candidate Full Name",
       "contact": {{ "email": "...", "phone": "...", "location": "...", "linkedin": "..." }},
       "summary": "Optimized professional summary paragraph",
       "technical_skills": {{
-         "Category Name (e.g., Data Querying & Programming)": ["Skill 1", "Skill 2"]
+         "Category Name": ["Skill 1", "Skill 2"]
       }},
       "professional_experience": [
          {{
@@ -184,8 +254,8 @@ def tailor_resume(resume_text, job_description):
          {{ "degree": "...", "school": "...", "date": "..." }}
       ],
       "estimated_ats_score": "95%",
-      "added_keywords": ["keyword1", "keyword2"],
-      "missing_keywords": ["keyword3"],
+      "added_keywords": ["keyword1"],
+      "missing_keywords": ["keyword2"],
       "explanation": "Brief explanation of updates."
     }}
     """
@@ -203,11 +273,7 @@ def tailor_resume(resume_text, job_description):
 def create_pdf(data):
     """Compiles JSON data structure into formatted PDF file."""
     linkedin_raw = data["contact"].get("linkedin", "www.linkedin.com/in/charanravva")
-    if linkedin_raw.startswith("http"):
-        linkedin_url = linkedin_raw
-    else:
-        linkedin_url = f"https://{linkedin_raw}"
-
+    linkedin_url = linkedin_raw if linkedin_raw.startswith("http") else f"https://{linkedin_raw}"
     linkedin_html = f'<a href="{linkedin_url}">{linkedin_raw}</a>'
 
     skills_html = ""
@@ -259,53 +325,18 @@ def create_pdf(data):
     <html>
     <head>
     <style>
-        @page {{
-            size: letter;
-            margin: 0.4in;
-        }}
-        body {{
-            font-family: calibri;
-            color: #111111;
-            text-align: justify;
-            line-height: 1.25;
-            font-size: 9pt;
-        }}
-        .name {{
-            text-align: center;
-            font-size: 16pt;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }}
-        .contact {{
-            text-align: center;
-            font-size: 9.5pt;
-            margin-bottom: 10px;
-            color: #111111;
-        }}
-        .contact a {{
-            color: #0066CC;
-            text-decoration: underline;
-        }}
+        @page {{ size: letter; margin: 0.4in; }}
+        body {{ font-family: calibri; color: #111111; text-align: justify; line-height: 1.25; font-size: 9pt; }}
+        .name {{ text-align: center; font-size: 16pt; font-weight: bold; margin-bottom: 2px; }}
+        .contact {{ text-align: center; font-size: 9.5pt; margin-bottom: 10px; color: #111111; }}
+        .contact a {{ color: #0066CC; text-decoration: underline; }}
         .section-title {{
-            font-size: 11pt;
-            font-weight: bold;
-            text-transform: uppercase;
-            border-bottom: 1px solid #222222;
-            margin-top: 8px;
-            margin-bottom: 4px;
-            padding-bottom: 1px;
-            page-break-after: avoid;
-            -pdf-keep-with-next: true;
+            font-size: 11pt; font-weight: bold; text-transform: uppercase;
+            border-bottom: 1px solid #222222; margin-top: 8px; margin-bottom: 4px;
+            padding-bottom: 1px; page-break-after: avoid; -pdf-keep-with-next: true;
         }}
-        .summary {{
-            font-size: 9.5pt;
-            text-align: justify;
-            margin-bottom: 6px;
-        }}
-        .job-block {{
-            page-break-inside: avoid;
-            margin-bottom: 6px;
-        }}
+        .summary {{ font-size: 9.5pt; text-align: justify; margin-bottom: 6px; }}
+        .job-block {{ page-break-inside: avoid; margin-bottom: 6px; }}
     </style>
     </head>
     <body>
@@ -313,16 +344,12 @@ def create_pdf(data):
         <div class="contact">
             {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {linkedin_html}
         </div>
-        
         <div class="section-title">Summary</div>
         <div class="summary">{data.get('summary', '')}</div>
-        
         <div class="section-title">Technical Skills</div>
         {skills_html}
-        
         <div class="section-title">Professional Experience</div>
         {experience_html}
-        
         <div class="section-title">Education</div>
         {education_html}
     </body>
@@ -331,7 +358,6 @@ def create_pdf(data):
 
     result = io.BytesIO()
     pisa_status = pisa.CreatePDF(html_template, dest=result)
-
     if not pisa_status.err:
         result.seek(0)
         return result
@@ -353,7 +379,6 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
     st.header("Find Job Postings")
 
-    # Timeframe mapping dictionary (Labels -> Hours)
     timeframe_map = {
         "Last 24 Hours": 24,
         "Last 3 Days": 72,
@@ -361,7 +386,6 @@ with tab1:
         "Last 1 Month": 720,
     }
 
-    # Input controls layout
     col_a, col_b, col_c, col_d = st.columns([2, 1.5, 1.5, 1])
     with col_a:
         search_term = st.text_input("Job Title Query", value="Marketing Analyst")
@@ -371,25 +395,28 @@ with tab1:
         selected_timeframe = st.selectbox(
             "Date Posted",
             options=list(timeframe_map.keys()),
-            index=0  # Defaults to "Last 24 Hours"
+            index=0
         )
     with col_d:
-        results_num = st.number_input(
-            "Max Results", min_value=10, max_value=100, value=25
-        )
+        results_num = st.number_input("Max Results", min_value=10, max_value=100, value=25)
 
-    boards = st.multiselect(
-        "Target Platforms",
-        ["linkedin", "indeed", "zip_recruiter", "glassdoor"],
-        default=["linkedin", "indeed"],
-    )
+    col_s1, col_s2 = st.columns([3, 1])
+    with col_s1:
+        boards = st.multiselect(
+            "Target Platforms",
+            ["linkedin", "indeed", "zip_recruiter", "glassdoor"],
+            default=["linkedin", "indeed"],
+        )
+    with col_s2:
+        include_direct_ats = st.checkbox("Include Direct Portals (Greenhouse, Lever)", value=True)
 
     if st.button("Search Fresh Postings", type="primary"):
         selected_hours = timeframe_map[selected_timeframe]
 
         with st.spinner(f"Scraping live listings from the {selected_timeframe.lower()}..."):
             try:
-                jobs_df = scrape_jobs(
+                # 1. Scrape standard platforms using JobSpy
+                df_jobspy = scrape_jobs(
                     site_name=boards,
                     search_term=search_term,
                     location=location,
@@ -399,25 +426,32 @@ with tab1:
                     linkedin_fetch_description=True,
                 )
 
-                if not jobs_df.empty:
-                    st.session_state.jobs_df = jobs_df
-                    st.success(
-                        f"Found {len(jobs_df)} jobs posted within the {selected_timeframe.lower()}!"
+                # 2. Optionally scrape direct ATS portals
+                df_ats = pd.DataFrame()
+                if include_direct_ats:
+                    df_ats = search_direct_ats(
+                        job_title=search_term,
+                        location=location,
+                        max_results=results_num
                     )
+
+                # 3. Merge and deduplicate
+                final_jobs_df = merge_and_deduplicate_jobs([df_ats, df_jobspy])
+
+                if not final_jobs_df.empty:
+                    st.session_state.jobs_df = final_jobs_df
+                    st.success(f"Found {len(final_jobs_df)} unique jobs (duplicates auto-removed)!")
                 else:
-                    st.warning(
-                        f"No jobs found matching your criteria within the {selected_timeframe.lower()}."
-                    )
+                    st.warning(f"No jobs found matching your criteria within the {selected_timeframe.lower()}.")
             except Exception as err:
                 st.error(f"Error executing scraper: {err}")
 
-    # Render results table and import controls
+    # Render results table
     if "jobs_df" in st.session_state and not st.session_state.jobs_df.empty:
         df = st.session_state.jobs_df
 
-        st.caption("💡 **Tip:** Click the **Apply ↗️** link to view the job on the platform, or click anywhere on a row to select and import it.")
+        st.caption("💡 **Tip:** Click the **Apply ↗️** link to view the job, or click anywhere on a row to select and import it.")
 
-        # Interactive table with Apply column and row selection
         event = st.dataframe(
             df[["site", "title", "company", "location", "date_posted", "job_url"]],
             column_config={
@@ -470,10 +504,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.header("🎯 AI Resume Tailor")
-    st.write(
-        "Upload a base resume, review or edit the target job description, and"
-        " generate your optimized PDF."
-    )
+    st.write("Upload a base resume, review or edit the target job description, and generate your optimized PDF.")
 
     col1, col2 = st.columns(2)
 
@@ -501,9 +532,7 @@ with tab2:
 
     if st.button("Tailor My Resume", type="primary", use_container_width=True):
         if uploaded_resume and job_description:
-            with st.spinner(
-                "Analyzing data and generating your optimized resume document..."
-            ):
+            with st.spinner("Analyzing data and generating your optimized resume document..."):
                 try:
                     base_text = extract_text_from_pdf(uploaded_resume)
                     result_data = tailor_resume(base_text, job_description)
@@ -515,46 +544,24 @@ with tab2:
                             label="Estimated ATS Match Score",
                             value=result_data.get("estimated_ats_score", "N/A"),
                         )
-                        st.info(
-                            "**Optimization Summary:**"
-                            f" {result_data.get('explanation', '')}"
-                        )
+                        st.info(f"**Optimization Summary:** {result_data.get('explanation', '')}")
 
                         colA, colB = st.columns(2)
                         with colA:
                             with st.expander("✅ Keywords Integrated"):
-                                st.write(
-                                    ", ".join(
-                                        result_data.get("added_keywords", [])
-                                    )
-                                )
+                                st.write(", ".join(result_data.get("added_keywords", [])))
                         with colB:
-                            with st.expander(
-                                "❌ Omitted Keywords (Couldn't fit naturally)"
-                            ):
-                                st.write(
-                                    ", ".join(
-                                        result_data.get("missing_keywords", [])
-                                    )
-                                )
+                            with st.expander("❌ Omitted Keywords"):
+                                st.write(", ".join(result_data.get("missing_keywords", [])))
 
-                        clean_name = (
-                            result_data.get("name", "Sri_Charan_Ravva")
-                            .strip()
-                            .lower()
-                            .replace(" ", "_")
-                        )
-                        clean_company = (
-                            company_name.strip().lower().replace(" ", "_")
-                        )
-                        clean_title = (
-                            target_title.strip().lower().replace(" ", "_")
-                        )
+                        # STRICT FILENAME SANITIZATION (Prevents Supabase 400 InvalidKey errors)
+                        clean_name = re.sub(r'[^a-zA-Z0-9]', '_', result_data.get("name", "Sri_Charan_Ravva").strip().lower())
+                        clean_company = re.sub(r'[^a-zA-Z0-9]', '_', company_name.strip().lower())
+                        clean_title = re.sub(r'[^a-zA-Z0-9]', '_', target_title.strip().lower())
 
-                        if not clean_company:
-                            clean_company = "optimized"
-                        if not clean_title:
-                            clean_title = "role"
+                        clean_name = re.sub(r'_+', '_', clean_name).strip('_')
+                        clean_company = re.sub(r'_+', '_', clean_company).strip('_') or "optimized"
+                        clean_title = re.sub(r'_+', '_', clean_title).strip('_') or "role"
 
                         job_id = f"{clean_company}_{clean_title}"
 
@@ -581,21 +588,12 @@ with tab2:
                             type="primary",
                         )
                     else:
-                        st.error(
-                            "The PDF rendering engine encountered a layout error"
-                            " processing the generated text."
-                        )
+                        st.error("The PDF rendering engine encountered a layout error processing the generated text.")
 
                 except Exception as e:
-                    st.error(
-                        "An error occurred during calculation or runtime"
-                        f" processing: {e}"
-                    )
+                    st.error(f"An error occurred during runtime processing: {e}")
         else:
-            st.warning(
-                "Please make sure you have uploaded a resume file and provided a"
-                " target job description."
-            )
+            st.warning("Please make sure you have uploaded a resume file and provided a target job description.")
 
 
 # ==========================================
@@ -633,7 +631,7 @@ with tab3:
         
         filtered_df = apps_df if status_filter == "All" else apps_df[apps_df["status"] == status_filter]
 
-        # Applications Table with formatted LinkColumn
+        # Applications Table with LinkColumn
         st.dataframe(
             filtered_df[["company", "title", "status", "ats_score", "job_url", "created_at"]],
             column_config={
