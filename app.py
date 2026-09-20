@@ -540,11 +540,6 @@ with tab2:
             value=st.session_state.selected_company,
             placeholder="e.g., Intuit, Google, PepsiCo",
         )
-        target_title = st.text_input(
-            "Job Title",
-            value=st.session_state.selected_title,
-            placeholder="e.g., Senior Data Analyst",
-        )
         job_description = st.text_area(
             "Paste Job Description Here",
             value=st.session_state.selected_jd,
@@ -575,22 +570,25 @@ with tab2:
                             with st.expander("❌ Omitted Keywords"):
                                 st.write(", ".join(result_data.get("missing_keywords", [])))
 
-                        # STRICT FILENAME SANITIZATION (Prevents Supabase 400 InvalidKey errors)
-                        clean_name = re.sub(r'[^a-zA-Z0-9]', '_', result_data.get("name", "Sri_Charan_Ravva").strip().lower())
-                        clean_company = re.sub(r'[^a-zA-Z0-9]', '_', company_name.strip().lower())
-                        clean_title = re.sub(r'[^a-zA-Z0-9]', '_', target_title.strip().lower())
+                        # FORMAT FILENAME WITH UNDERSCORES ONLY (e.g. sri_charan_ravva_companyname.pdf)
+                        clean_name = re.sub(r'[^a-zA-Z0-9]', '_', result_data.get("name", "sri_charan_ravva").strip().lower())
+                        clean_company = re.sub(r'[^a-zA-Z0-9]', '_', company_name.strip().lower()) if company_name else "company"
 
+                        # Strip multiple consecutive underscores
                         clean_name = re.sub(r'_+', '_', clean_name).strip('_')
-                        clean_company = re.sub(r'_+', '_', clean_company).strip('_') or "optimized"
-                        clean_title = re.sub(r'_+', '_', clean_title).strip('_') or "role"
+                        clean_company = re.sub(r'_+', '_', clean_company).strip('_')
 
-                        job_id = f"{clean_company}_{clean_title}"
+                        download_filename = f"{clean_name}_{clean_company}.pdf"
+
+                        # Retrieve or fallback title for database storing
+                        stored_title = st.session_state.get("selected_title") or "Target Role"
+                        job_id = f"{clean_company}_{re.sub(r'[^a-zA-Z0-9]', '_', stored_title.lower())}"
 
                         # Save record and upload PDF to Supabase
                         save_success = save_application_supabase(
                             job_id=job_id,
                             company=company_name or "Target Company",
-                            title=target_title or "Marketing Analyst",
+                            title=stored_title,
                             location=st.session_state.get("selected_location", "USA"),
                             job_url=st.session_state.get("selected_job_url", ""),
                             ats_score=result_data.get("estimated_ats_score", "N/A"),
@@ -604,7 +602,7 @@ with tab2:
                         st.download_button(
                             label="⬇️ Download Optimized Resume (.pdf)",
                             data=pdf_buffer,
-                            file_name=f"{clean_name}_{clean_company}.pdf",
+                            file_name=download_filename,
                             mime="application/pdf",
                             type="primary",
                         )
