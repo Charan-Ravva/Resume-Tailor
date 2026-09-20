@@ -7,7 +7,6 @@ from google.genai import types
 from xhtml2pdf import pisa
 
 # --- CONFIGURATION ---
-# Replace this placeholder with your actual Gemini API Key from Google AI Studio
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -40,7 +39,7 @@ def tailor_resume(resume_text, job_description):
     - Location: New York, USA
     - LinkedIn: www.linkedin.com/in/charanravva
 
-STEP 1: TARGET FOCUS IDENTIFICATION
+    STEP 1: TARGET FOCUS IDENTIFICATION
     Identify the 3 to 5 core themes or highest-priority keywords emphasized most in the JD (e.g., Lead Generation, CRM Systems Architecture, Pipeline Velocity, Commercial Intelligence).
 
     STEP 2: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
@@ -61,15 +60,11 @@ STEP 1: TARGET FOCUS IDENTIFICATION
     - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
     - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
     - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
-    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. keywords or methodology should not be more tham 15 per category.
-
-
+    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. Keywords or methodology should not be more than 15 per category.
 
     STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
     Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
 
-
-    
     You must output a single JSON object matching this exact structural schema:
     {{
       "name": "Candidate Full Name",
@@ -116,7 +111,6 @@ def create_pdf(data):
     else:
         linkedin_url = f"https://{linkedin_raw}"
 
-    # Build explicit hyperlinked text anchor
     linkedin_html = f'<a href="{linkedin_url}">{linkedin_raw}</a>'
     
     # 1. Dynamically build Technical Skills HTML block
@@ -128,35 +122,39 @@ def create_pdf(data):
         </p>
         """
 
-    # 2. Dynamically build Professional Experience HTML block
+    # 2. Dynamically build Professional Experience HTML block (Wrapped in avoid-break div)
     experience_html = ""
     for job in data.get('professional_experience', []):
         bullets_html = "".join([f"<li style='margin-bottom: 2px; font-size: 10pt;'>{b}</li>" for b in job.get('bullets', [])])
         experience_html += f"""
-        <table style="width: 100%; margin-top: 6px; margin-bottom: 2px;" cellpadding="0" cellspacing="0">
-            <tr>
-                <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
-                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
-            </tr>
-        </table>
-        <ul style="margin-top: 2px; margin-bottom: 4px; padding-left: 20px;">
-            {bullets_html}
-        </ul>
+        <div style="page-break-inside: avoid; margin-bottom: 8px;">
+            <table style="width: 100%; margin-top: 6px; margin-bottom: 2px;" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
+                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
+                </tr>
+            </table>
+            <ul style="margin-top: 2px; margin-bottom: 4px; padding-left: 20px;">
+                {bullets_html}
+            </ul>
+        </div>
         """
 
     # 3. Dynamically build Education HTML block
     education_html = ""
     for edu in data.get('education', []):
         education_html += f"""
-        <table style="width: 100%; margin-top: 4px;" cellpadding="0" cellspacing="0">
-            <tr>
-                <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
-                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
-            </tr>
-            <tr>
-                <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
-            </tr>
-        </table>
+        <div style="page-break-inside: avoid;">
+            <table style="width: 100%; margin-top: 4px;" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
+                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
+                </tr>
+                <tr>
+                    <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
+                </tr>
+            </table>
+        </div>
         """
 
     # 4. Global HTML Template Structure
@@ -200,6 +198,7 @@ def create_pdf(data):
             margin-top: 10px;
             margin-bottom: 4px;
             padding-bottom: 1px;
+            page-break-after: avoid;
         }}
         .summary {{
             font-size: 10pt;
@@ -211,8 +210,8 @@ def create_pdf(data):
     <body>
         <div class="name">{data.get('name', '')}</div>
         <div class="contact">
-    {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {linkedin_html}
-</div>
+            {data['contact'].get('email', '')} | {data['contact'].get('phone', '')} | {data['contact'].get('location', '')} | {linkedin_html}
+        </div>
         
         <div class="section-title">Summary</div>
         <div class="summary">{data.get('summary', '')}</div>
