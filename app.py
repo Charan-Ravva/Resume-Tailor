@@ -37,7 +37,7 @@ def tailor_resume(resume_text, job_description):
     - Name: Sri Charan Ravva
     - Email: Sricharan.ravva07@gmail.com
     - Phone: 616-439-0213
-    - Default Base Location: New York, USA
+    - Location: New York, USA
     - LinkedIn: www.linkedin.com/in/charanravva
 
 STEP 1: TARGET FOCUS IDENTIFICATION
@@ -46,17 +46,13 @@ STEP 1: TARGET FOCUS IDENTIFICATION
     STEP 2: MANDATORY BULLET RESTRUCTURING & REWRITING (STRICT)
     For EACH position in professional_experience:
     1. REORDER: Move or add bullet points that directly match the JD at the start.
-    Generate 7 high-impact bullets for both roles.
+    Generate 8 high-impact bullets for both roles.
     2. WRITE NEW BULLETS: Generate 1 to 2 BRAND NEW bullet points explicitly describing accomplishment-driven tasks built around missing JD keywords (e.g., event analysis, win/loss trend reporting, re-engaging dormant accounts).
     3. NO TACKING ON / REWRITE ENTIRELY: NEVER simply tack JD keywords onto the end or start of old sentences. Rewrite the entire sentence seamlessly around the accomplishment.
     4. STRUCTURE RULE: Every single bullet point MUST strictly follow: 
        [Strong Action Verb] + [Context & Business Task] + [Technical Tool Used] + [Quantifiable Business Outcome/Metric].
        
-    STEP 3: DYNAMIC LOCATION & HEADER ALIGNMENT (HIGH PRIORITY)
-    - Extract the physical job location (City, State / Country) directly from the Job Description text (e.g., "Austin, TX", "Chicago, IL", "Boston, MA", "London, UK").
-    - IF a specific physical city/state is found in the JD: Set "contact.location" in the output JSON strictly to that extracted city/state location.
-    - IF the job is explicitly marked strictly as "Remote" OR no physical city/state is mentioned anywhere in the JD text: Set "contact.location" to "New York, USA".
-    - DO NOT default to "New York, USA" if any specific city, state, or office location is named in the JD.
+    STEP 3: 
     - DO NOT alter past or current employment job titles inside professional_experience. Only reflect the target position title inside the Professional Summary.
 
     STEP 4: KEYWORD GAP AUDIT
@@ -65,7 +61,7 @@ STEP 1: TARGET FOCUS IDENTIFICATION
     - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
     - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
     - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
-    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST.
+    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. keywords or methodology should not be more tham 15 per category.
 
 
 
