@@ -68,8 +68,7 @@ def tailor_resume(resume_text, job_description):
     - Platforms & Tools (e.g., Salesforce, HubSpot, Marketo, Databricks)
     - Languages & Scripting (e.g., SQL, Python, R, AMPScript)
     - Methodologies & Processes (e.g., A/B Testing, Lead Scoring, CRM Hygiene)
-    - Domain Terminology (e.g., Pipeline Velocity, Multi-touch Attribution, Whitespace Opportunities)
-    Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. Keywords or methodology should not be more than 15 per category.
+    - Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. Keywords or methodology should not be more than 15 per category.
 
     STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
     Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
