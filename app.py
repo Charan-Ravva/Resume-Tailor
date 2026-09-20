@@ -122,39 +122,40 @@ def create_pdf(data):
         </p>
         """
 
-    # 2. Dynamically build Professional Experience HTML block (Wrapped in avoid-break div)
+    # 2. Dynamically build Professional Experience HTML block
+    # Note: Uses single <table> structure and -pdf-keep-with-next to prevent page break splits between title and bullets
     experience_html = ""
     for job in data.get('professional_experience', []):
         bullets_html = "".join([f"<li style='margin-bottom: 2px; font-size: 10pt;'>{b}</li>" for b in job.get('bullets', [])])
         experience_html += f"""
-        <div style="page-break-inside: avoid; margin-bottom: 8px;">
-            <table style="width: 100%; margin-top: 6px; margin-bottom: 2px;" cellpadding="0" cellspacing="0">
-                <tr>
-                    <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
-                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
-                </tr>
-            </table>
-            <ul style="margin-top: 2px; margin-bottom: 4px; padding-left: 20px;">
-                {bullets_html}
-            </ul>
-        </div>
+        <table style="width: 100%; margin-top: 6px; margin-bottom: 8px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
+            <tr style="-pdf-keep-with-next: true;">
+                <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
+                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
+            </tr>
+            <tr>
+                <td colspan="2" style="padding-top: 2px;">
+                    <ul style="margin-top: 0px; margin-bottom: 4px; padding-left: 20px;">
+                        {bullets_html}
+                    </ul>
+                </td>
+            </tr>
+        </table>
         """
 
     # 3. Dynamically build Education HTML block
     education_html = ""
     for edu in data.get('education', []):
         education_html += f"""
-        <div style="page-break-inside: avoid;">
-            <table style="width: 100%; margin-top: 4px;" cellpadding="0" cellspacing="0">
-                <tr>
-                    <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
-                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
-                </tr>
-                <tr>
-                    <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
-                </tr>
-            </table>
-        </div>
+        <table style="width: 100%; margin-top: 4px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
+                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
+            </tr>
+            <tr>
+                <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
+            </tr>
+        </table>
         """
 
     # 4. Global HTML Template Structure
