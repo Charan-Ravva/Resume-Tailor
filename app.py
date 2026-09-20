@@ -112,7 +112,7 @@ def tailor_resume(resume_text, job_description):
 
 
 def create_pdf(data):
-    """Compiles the JSON data structure into an elegant, ATS-perfect PDF file with page-break fixes."""
+    """Compiles the JSON data structure into an elegant PDF file with strict orphan/page-break protection."""
 
     linkedin_raw = data["contact"].get(
         "linkedin", "www.linkedin.com/in/charanravva"
@@ -133,45 +133,45 @@ def create_pdf(data):
         </p>
         """
 
-    # 2. Professional Experience Block (Single table unit prevents awkward page breaks)
+    # 2. Professional Experience Block (Wrapped in page-break-inside: avoid)
     experience_html = ""
     for job in data.get("professional_experience", []):
         bullets_html = "".join([
-            f"<li style='margin-bottom: 2px; font-size: 10pt;'>{b}</li>"
+            f"<li style='margin-bottom: 2px; font-size: 9.5pt;'>{b}</li>"
             for b in job.get("bullets", [])
         ])
         experience_html += f"""
-        <table style="width: 100%; margin-top: 6px; margin-bottom: 8px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
-            <tr style="-pdf-keep-with-next: true;">
-                <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
-                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
-            </tr>
-            <tr>
-                <td colspan="2" style="padding-top: 2px;">
-                    <ul style="margin-top: 0px; margin-bottom: 4px; padding-left: 20px;">
-                        {bullets_html}
-                    </ul>
-                </td>
-            </tr>
-        </table>
+        <div class="job-block">
+            <table style="width: 100%; margin-top: 4px; margin-bottom: 2px;" cellpadding="0" cellspacing="0">
+                <tr style="-pdf-keep-with-next: true;">
+                    <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
+                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
+                </tr>
+            </table>
+            <ul style="margin-top: 2px; margin-bottom: 6px; padding-left: 18px;">
+                {bullets_html}
+            </ul>
+        </div>
         """
 
     # 3. Education Block
     education_html = ""
     for edu in data.get("education", []):
         education_html += f"""
-        <table style="width: 100%; margin-top: 4px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
-            <tr>
-                <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
-                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
-            </tr>
-            <tr>
-                <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
-            </tr>
-        </table>
+        <div style="page-break-inside: avoid;">
+            <table style="width: 100%; margin-top: 4px;" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="font-weight: bold; font-size: 10pt; width: 70%;">{edu.get('degree')}</td>
+                    <td style="text-align: right; font-style: italic; font-size: 10pt; width: 30%;">{edu.get('date')}</td>
+                </tr>
+                <tr>
+                    <td style="font-size: 10pt; font-style: italic;" colspan="2">{edu.get('school')}</td>
+                </tr>
+            </table>
+        </div>
         """
 
-    # 4. Global HTML Template
+    # 4. Global HTML & CSS Template
     html_template = f"""
     <!DOCTYPE html>
     <html>
@@ -185,7 +185,7 @@ def create_pdf(data):
             font-family: calibri;
             color: #111111;
             text-align: justify;
-            line-height: 1.3;
+            line-height: 1.25;
             font-size: 9pt;
         }}
         .name {{
@@ -197,7 +197,7 @@ def create_pdf(data):
         .contact {{
             text-align: center;
             font-size: 9.5pt;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             color: #111111;
         }}
         .contact a {{
@@ -209,15 +209,20 @@ def create_pdf(data):
             font-weight: bold;
             text-transform: uppercase;
             border-bottom: 1px solid #222222;
-            margin-top: 10px;
+            margin-top: 8px;
             margin-bottom: 4px;
             padding-bottom: 1px;
             page-break-after: avoid;
+            -pdf-keep-with-next: true;
         }}
         .summary {{
-            font-size: 10pt;
+            font-size: 9.5pt;
             text-align: justify;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+        }}
+        .job-block {{
+            page-break-inside: avoid;
+            margin-bottom: 6px;
         }}
     </style>
     </head>
