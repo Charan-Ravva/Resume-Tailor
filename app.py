@@ -7,16 +7,106 @@ from google import genai
 from google.genai import types
 from jobspy import scrape_jobs
 from xhtml2pdf import pisa
+from supabase import create_client, Client
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+# --- SUPABASE CONFIGURATION ---
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+
+@st.cache_resource
+def get_supabase_client() -> Client:
+    """Initializes and caches the Supabase client connection."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase_client = get_supabase_client()
+
+
+# --- SUPABASE DATABASE & STORAGE HELPERS ---
+def save_application_supabase(job_id, company, title, location, job_url, ats_score, status, notes, pdf_bytes):
+    """Saves application record to Supabase Postgres and uploads PDF to Storage."""
+    if not supabase_client:
+        return False
+
+    pdf_filename = f"{job_id}.pdf"
+
+    # 1. Upload PDF binary to 'resumes' bucket
+    try:
+        supabase_client.storage.from_("resumes").upload(
+            path=pdf_filename,
+            file=pdf_bytes,
+            file_options={"content-type": "application/pdf", "upsert": "true"}
+        )
+    except Exception as e:
+        st.warning(f"Note on PDF Storage upload: {e}")
+
+    # 2. Insert/Upsert record in 'applications' table
+    data = {
+        "job_id": job_id,
+        "company": company,
+        "title": title,
+        "location": location,
+        "job_url": job_url,
+        "ats_score": str(ats_score),
+        "status": status,
+        "notes": notes,
+        "pdf_path": pdf_filename
+    }
+
+    supabase_client.table("applications").upsert(data).execute()
+    return True
+
+def fetch_all_applications_supabase():
+    """Fetches all applications from Supabase ordered by date created."""
+    if not supabase_client:
+        return pd.DataFrame()
+    res = supabase_client.table("applications").select("*").order("created_at", desc=True).execute()
+    return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+
+def download_pdf_from_supabase(pdf_filename):
+    """Retrieves PDF binary from Supabase Storage."""
+    if not supabase_client or not pdf_filename:
+        return None
+    try:
+        return supabase_client.storage.from_("resumes").download(pdf_filename)
+    except Exception as e:
+        st.error(f"Error fetching PDF from storage: {e}")
+        return None
+
+def update_application_status_supabase(job_id, status, notes):
+    """Updates status and notes for a specific job application."""
+    if not supabase_client:
+        return
+    supabase_client.table("applications").update({"status": status, "notes": notes}).eq("job_id", job_id).execute()
+
+def delete_application_supabase(job_id, pdf_filename):
+    """Deletes an application record and its PDF from Supabase."""
+    if not supabase_client:
+        return
+    supabase_client.table("applications").delete().eq("job_id", job_id).execute()
+    if pdf_filename:
+        try:
+            supabase_client.storage.from_("resumes").remove([pdf_filename])
+        except Exception:
+            pass
+
 
 # --- SESSION STATE INITIALIZATION ---
 if "selected_jd" not in st.session_state:
     st.session_state.selected_jd = ""
 if "selected_company" not in st.session_state:
     st.session_state.selected_company = ""
+if "selected_title" not in st.session_state:
+    st.session_state.selected_title = ""
+if "selected_location" not in st.session_state:
+    st.session_state.selected_location = ""
+if "selected_job_url" not in st.session_state:
+    st.session_state.selected_job_url = ""
 
 
 # --- HELPER FUNCTIONS ---
@@ -132,7 +222,7 @@ def create_pdf(data):
         </p>
         """
 
-    # 2. Professional Experience Block (Wrapped in page-break-inside: avoid)
+    # 2. Professional Experience Block
     experience_html = ""
     for job in data.get("professional_experience", []):
         bullets_html = "".join([
@@ -256,9 +346,13 @@ def create_pdf(data):
 
 
 # --- STREAMLIT UI SETUP ---
-st.set_page_config(page_title="AI Resume Tailor & Job Finder", layout="wide")
+st.set_page_config(page_title="AI Resume Tailor & Job Tracker", layout="wide")
 
-tab1, tab2 = st.tabs(["🔍 Job Scraper (Last 24 Hours)", "🎯 Resume Tailor"])
+tab1, tab2, tab3 = st.tabs([
+    "🔍 Job Scraper (Last 24 Hours)", 
+    "🎯 Resume Tailor", 
+    "📊 Application Tracker Dashboard"
+])
 
 # ==========================================
 # TAB 1: LIVE JOB SCRAPER
@@ -290,7 +384,7 @@ with tab1:
                     search_term=search_term,
                     location=location,
                     results_wanted=results_num,
-                    hours_old=24,  # Strictly forces postings from last 24h
+                    hours_old=24,
                     country_indeed="USA",
                     linkedin_fetch_description=True,
                 )
@@ -339,6 +433,9 @@ with tab1:
         if st.button("➡️ Import Description into Resume Tailor"):
             st.session_state.selected_jd = selected_row.get("description", "")
             st.session_state.selected_company = selected_row.get("company", "")
+            st.session_state.selected_title = selected_row.get("title", "")
+            st.session_state.selected_location = selected_row.get("location", "")
+            st.session_state.selected_job_url = selected_row.get("job_url", "")
             st.success(
                 "Successfully imported! Navigate to the 'Resume Tailor' tab to generate your PDF."
             )
@@ -366,6 +463,11 @@ with tab2:
             "Company Name",
             value=st.session_state.selected_company,
             placeholder="e.g., Intuit, Google, PepsiCo",
+        )
+        target_title = st.text_input(
+            "Job Title",
+            value=st.session_state.selected_title,
+            placeholder="e.g., Senior Data Analyst",
         )
         job_description = st.text_area(
             "Paste Job Description Here",
@@ -421,9 +523,32 @@ with tab2:
                         clean_company = (
                             company_name.strip().lower().replace(" ", "_")
                         )
+                        clean_title = (
+                            target_title.strip().lower().replace(" ", "_")
+                        )
 
                         if not clean_company:
                             clean_company = "optimized"
+                        if not clean_title:
+                            clean_title = "role"
+
+                        # Unique ID for Supabase Primary Key
+                        job_id = f"{clean_company}_{clean_title}"
+
+                        # --- AUTO-SAVE TO SUPABASE TRACKER ---
+                        save_success = save_application_supabase(
+                            job_id=job_id,
+                            company=company_name or "Target Company",
+                            title=target_title or "Marketing Analyst",
+                            location=st.session_state.get("selected_location", "USA"),
+                            job_url=st.session_state.get("selected_job_url", ""),
+                            ats_score=result_data.get("estimated_ats_score", "N/A"),
+                            status="Tailored",
+                            notes=result_data.get("explanation", ""),
+                            pdf_bytes=pdf_buffer.getvalue()
+                        )
+                        if save_success:
+                            st.toast("Saved application record and PDF to Supabase!", icon="☁️")
 
                         st.download_button(
                             label="⬇️ Download Optimized Resume (.pdf)",
@@ -448,3 +573,111 @@ with tab2:
                 "Please make sure you have uploaded a resume file and provided a"
                 " target job description."
             )
+
+
+# ==========================================
+# TAB 3: APPLICATION TRACKER DASHBOARD
+# ==========================================
+with tab3:
+    st.header("📊 Application Tracker Dashboard")
+    st.caption("Manage your job hunt, track application progress, download tailored resumes, and save interview notes.")
+
+    apps_df = fetch_all_applications_supabase()
+
+    if apps_df.empty:
+        st.info("No applications tracked yet. Tailor a resume to populate this tracker!")
+    else:
+        # Metrics Row
+        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+        col_m1.metric("Total Tracked", len(apps_df))
+        col_m2.metric("Applied", len(apps_df[apps_df["status"] == "Applied"]))
+        col_m3.metric("Interviewing 🎯", len(apps_df[apps_df["status"] == "Interviewing"]))
+        col_m4.metric("Offers 🍾", len(apps_df[apps_df["status"] == "Offer"]))
+        
+        # Calculate Average ATS score safely
+        ats_numeric = pd.to_numeric(apps_df['ats_score'].astype(str).str.rstrip('%'), errors='coerce')
+        avg_ats = f"{ats_numeric.mean():.1f}%" if not ats_numeric.isna().all() else "N/A"
+        col_m5.metric("Avg ATS Match", avg_ats)
+
+        st.divider()
+
+        # Status Filter
+        col_f1, col_f2 = st.columns([1, 3])
+        with col_f1:
+            status_filter = st.selectbox(
+                "Filter by Status:",
+                options=["All", "Tailored", "Applied", "Interviewing", "Offer", "Rejected"]
+            )
+        
+        filtered_df = apps_df if status_filter == "All" else apps_df[apps_df["status"] == status_filter]
+
+        # Applications Table
+        st.dataframe(
+            filtered_df[["company", "title", "status", "ats_score", "job_url", "created_at"]],
+            column_config={
+                "job_url": st.column_config.LinkColumn("Job Posting"),
+                "created_at": st.column_config.DatetimeColumn("Date Tracked", format="D MMM YYYY, HH:mm"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.divider()
+
+        # Application Detail & Status Updater
+        st.subheader("📝 Application Manager")
+        
+        job_options = {
+            f"{row['company']} - {row['title']} ({row['status']})": row['job_id']
+            for _, row in apps_df.iterrows()
+        }
+        
+        selected_label = st.selectbox("Select an application to manage:", list(job_options.keys()))
+        selected_id = job_options[selected_label]
+        
+        app = apps_df[apps_df["job_id"] == selected_id].iloc[0]
+
+        col_d1, col_d2 = st.columns([2, 1])
+
+        with col_d1:
+            st.markdown(f"### **{app['title']}** at **{app['company']}**")
+            if app["job_url"]:
+                st.link_button("🔗 Open Original Job Posting", app["job_url"])
+
+            with st.form(f"update_form_{app['job_id']}"):
+                current_status = app["status"] if app["status"] in ["Tailored", "Applied", "Interviewing", "Offer", "Rejected"] else "Tailored"
+                new_status = st.selectbox(
+                    "Update Status:",
+                    options=["Tailored", "Applied", "Interviewing", "Offer", "Rejected"],
+                    index=["Tailored", "Applied", "Interviewing", "Offer", "Rejected"].index(current_status)
+                )
+                
+                new_notes = st.text_area("Notes (Recruiter contacts, call dates, follow-up actions):", value=app["notes"] if app["notes"] else "")
+                
+                if st.form_submit_button("💾 Save Status & Notes"):
+                    update_application_status_supabase(app["job_id"], new_status, new_notes)
+                    st.toast("Application status updated!", icon="✅")
+                    st.rerun()
+
+        with col_d2:
+            st.markdown("#### **Resume File**")
+            st.info(f"**ATS Match Score:** {app['ats_score']}")
+            
+            if app["pdf_path"]:
+                pdf_bytes = download_pdf_from_supabase(app["pdf_path"])
+                if pdf_bytes:
+                    st.download_button(
+                        label="⬇️ Retrieve Saved Resume PDF",
+                        data=pdf_bytes,
+                        file_name=f"{app['company']}_{app['title']}_Resume.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+            else:
+                st.write("No PDF associated with this record.")
+
+            st.markdown("---")
+            if st.button("🗑️ Delete Record", type="secondary"):
+                delete_application_supabase(app["job_id"], app["pdf_path"])
+                st.toast("Application record removed.")
+                st.rerun()
