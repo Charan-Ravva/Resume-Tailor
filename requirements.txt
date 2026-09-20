@@ -1,4 +1,6 @@
 streamlit
-PyPDF2
 google-genai
+PyPDF2
 xhtml2pdf
+pandas
+python-jobspy
