@@ -1,6 +1,7 @@
 streamlit
 google-genai
-PyPDF2
-xhtml2pdf
 pandas
-python-jobspy
+PyPDF2
+jobspy
+xhtml2pdf
+supabase
