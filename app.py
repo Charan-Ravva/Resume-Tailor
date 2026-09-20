@@ -122,7 +122,7 @@ def extract_text_from_pdf(uploaded_file):
 
 
 def tailor_resume(resume_text, job_description):
-    """Sends the prompt to Gemini and enforces a rigid JSON schema response."""
+    """Sends prompt to Gemini and enforces a rigid JSON schema response."""
     prompt = f"""
     You are an expert technical recruiter. 
     Analyze this candidate's resume:
@@ -201,11 +201,8 @@ def tailor_resume(resume_text, job_description):
 
 
 def create_pdf(data):
-    """Compiles the JSON data structure into an elegant PDF file with strict orphan/page-break protection."""
-
-    linkedin_raw = data["contact"].get(
-        "linkedin", "www.linkedin.com/in/charanravva"
-    )
+    """Compiles JSON data structure into formatted PDF file."""
+    linkedin_raw = data["contact"].get("linkedin", "www.linkedin.com/in/charanravva")
     if linkedin_raw.startswith("http"):
         linkedin_url = linkedin_raw
     else:
@@ -213,7 +210,6 @@ def create_pdf(data):
 
     linkedin_html = f'<a href="{linkedin_url}">{linkedin_raw}</a>'
 
-    # 1. Technical Skills Block
     skills_html = ""
     for category, skills in data.get("technical_skills", {}).items():
         skills_html += f"""
@@ -222,7 +218,6 @@ def create_pdf(data):
         </p>
         """
 
-    # 2. Professional Experience Block
     experience_html = ""
     for job in data.get("professional_experience", []):
         bullets_html = "".join([
@@ -243,7 +238,6 @@ def create_pdf(data):
         </div>
         """
 
-    # 3. Education Block
     education_html = ""
     for edu in data.get("education", []):
         education_html += f"""
@@ -260,7 +254,6 @@ def create_pdf(data):
         </div>
         """
 
-    # 4. Global HTML & CSS Template
     html_template = f"""
     <!DOCTYPE html>
     <html>
@@ -349,7 +342,7 @@ def create_pdf(data):
 st.set_page_config(page_title="AI Resume Tailor & Job Tracker", layout="wide")
 
 tab1, tab2, tab3 = st.tabs([
-    "🔍 Job Scraper (Last 24 Hours)", 
+    "🔍 Job Scraper", 
     "🎯 Resume Tailor", 
     "📊 Application Tracker Dashboard"
 ])
@@ -358,14 +351,29 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: LIVE JOB SCRAPER
 # ==========================================
 with tab1:
-    st.header("Find Marketing Analyst Jobs (Posted in Last 24 Hours)")
+    st.header("Find Job Postings")
 
-    col_a, col_b, col_c = st.columns([2, 2, 1])
+    # Timeframe mapping dictionary (Labels -> Hours)
+    timeframe_map = {
+        "Last 24 Hours": 24,
+        "Last 3 Days": 72,
+        "Last 1 Week": 168,
+        "Last 1 Month": 720,
+    }
+
+    # Input controls layout
+    col_a, col_b, col_c, col_d = st.columns([2, 1.5, 1.5, 1])
     with col_a:
         search_term = st.text_input("Job Title Query", value="Marketing Analyst")
     with col_b:
         location = st.text_input("Location", value="United States")
     with col_c:
+        selected_timeframe = st.selectbox(
+            "Date Posted",
+            options=list(timeframe_map.keys()),
+            index=0  # Defaults to "Last 24 Hours"
+        )
+    with col_d:
         results_num = st.number_input(
             "Max Results", min_value=10, max_value=100, value=25
         )
@@ -377,14 +385,16 @@ with tab1:
     )
 
     if st.button("Search Fresh Postings", type="primary"):
-        with st.spinner("Scraping live listings from the past 24 hours..."):
+        selected_hours = timeframe_map[selected_timeframe]
+
+        with st.spinner(f"Scraping live listings from the {selected_timeframe.lower()}..."):
             try:
                 jobs_df = scrape_jobs(
                     site_name=boards,
                     search_term=search_term,
                     location=location,
                     results_wanted=results_num,
-                    hours_old=24,
+                    hours_old=selected_hours,
                     country_indeed="USA",
                     linkedin_fetch_description=True,
                 )
@@ -392,11 +402,11 @@ with tab1:
                 if not jobs_df.empty:
                     st.session_state.jobs_df = jobs_df
                     st.success(
-                        f"Found {len(jobs_df)} jobs posted in the last 24 hours!"
+                        f"Found {len(jobs_df)} jobs posted within the {selected_timeframe.lower()}!"
                     )
                 else:
                     st.warning(
-                        "No jobs found matching your criteria in the past 24 hours."
+                        f"No jobs found matching your criteria within the {selected_timeframe.lower()}."
                     )
             except Exception as err:
                 st.error(f"Error executing scraper: {err}")
@@ -405,40 +415,54 @@ with tab1:
     if "jobs_df" in st.session_state and not st.session_state.jobs_df.empty:
         df = st.session_state.jobs_df
 
-        st.dataframe(
+        st.caption("💡 **Tip:** Click the **Apply ↗️** link to view the job on the platform, or click anywhere on a row to select and import it.")
+
+        # Interactive table with Apply column and row selection
+        event = st.dataframe(
             df[["site", "title", "company", "location", "date_posted", "job_url"]],
+            column_config={
+                "job_url": st.column_config.LinkColumn(
+                    "Apply",
+                    display_text="Apply ↗️",
+                    help="Click to open application page"
+                ),
+                "site": st.column_config.TextColumn("Platform"),
+                "title": st.column_config.TextColumn("Job Title"),
+                "company": st.column_config.TextColumn("Company"),
+                "location": st.column_config.TextColumn("Location"),
+                "date_posted": st.column_config.TextColumn("Posted"),
+            },
+            on_select="rerun",
+            selection_mode="single-row",
             use_container_width=True,
+            hide_index=True
         )
 
-        st.subheader("Import Job to Resume Generator")
-        job_options = [
-            f"{row['company']} - {row['title']} ({row['site']})"
-            for idx, row in df.iterrows()
-        ]
-        selected_index = st.selectbox(
-            "Select a job listing:",
-            range(len(job_options)),
-            format_func=lambda x: job_options[x],
-        )
+        selected_rows = event.selection.get("rows", [])
 
-        selected_row = df.iloc[selected_index]
-        st.markdown(
-            f"**Selected:** {selected_row['title']} at **{selected_row['company']}**"
-        )
-        st.markdown(f"🔗 [View Original Job Posting]({selected_row['job_url']})")
+        if selected_rows:
+            selected_index = selected_rows[0]
+            selected_row = df.iloc[selected_index]
 
-        with st.expander("Preview Full Job Description"):
-            st.write(selected_row.get("description", "No description available."))
+            st.markdown("---")
+            st.markdown(f"### Selected: **{selected_row['title']}** at **{selected_row['company']}**")
 
-        if st.button("➡️ Import Description into Resume Tailor"):
-            st.session_state.selected_jd = selected_row.get("description", "")
-            st.session_state.selected_company = selected_row.get("company", "")
-            st.session_state.selected_title = selected_row.get("title", "")
-            st.session_state.selected_location = selected_row.get("location", "")
-            st.session_state.selected_job_url = selected_row.get("job_url", "")
-            st.success(
-                "Successfully imported! Navigate to the 'Resume Tailor' tab to generate your PDF."
-            )
+            col_act1, col_act2 = st.columns([1, 2])
+            with col_act1:
+                st.link_button("🔗 Open Job Page", selected_row["job_url"], use_container_width=True)
+            with col_act2:
+                if st.button("➡️ Import Description into Resume Tailor", type="primary", use_container_width=True):
+                    st.session_state.selected_jd = selected_row.get("description", "")
+                    st.session_state.selected_company = selected_row.get("company", "")
+                    st.session_state.selected_title = selected_row.get("title", "")
+                    st.session_state.selected_location = selected_row.get("location", "")
+                    st.session_state.selected_job_url = selected_row.get("job_url", "")
+                    st.toast("Job imported! Switch to the Resume Tailor tab.", icon="🎯")
+
+            with st.expander("Preview Full Job Description"):
+                st.write(selected_row.get("description", "No description available."))
+        else:
+            st.info("👆 Click on any job row above to select it for auto-fill.")
 
 
 # ==========================================
@@ -532,10 +556,9 @@ with tab2:
                         if not clean_title:
                             clean_title = "role"
 
-                        # Unique ID for Supabase Primary Key
                         job_id = f"{clean_company}_{clean_title}"
 
-                        # --- AUTO-SAVE TO SUPABASE TRACKER ---
+                        # Save record and upload PDF to Supabase
                         save_success = save_application_supabase(
                             job_id=job_id,
                             company=company_name or "Target Company",
@@ -594,7 +617,6 @@ with tab3:
         col_m3.metric("Interviewing 🎯", len(apps_df[apps_df["status"] == "Interviewing"]))
         col_m4.metric("Offers 🍾", len(apps_df[apps_df["status"] == "Offer"]))
         
-        # Calculate Average ATS score safely
         ats_numeric = pd.to_numeric(apps_df['ats_score'].astype(str).str.rstrip('%'), errors='coerce')
         avg_ats = f"{ats_numeric.mean():.1f}%" if not ats_numeric.isna().all() else "N/A"
         col_m5.metric("Avg ATS Match", avg_ats)
@@ -611,12 +633,23 @@ with tab3:
         
         filtered_df = apps_df if status_filter == "All" else apps_df[apps_df["status"] == status_filter]
 
-        # Applications Table
+        # Applications Table with formatted LinkColumn
         st.dataframe(
             filtered_df[["company", "title", "status", "ats_score", "job_url", "created_at"]],
             column_config={
-                "job_url": st.column_config.LinkColumn("Job Posting"),
-                "created_at": st.column_config.DatetimeColumn("Date Tracked", format="D MMM YYYY, HH:mm"),
+                "company": st.column_config.TextColumn("Company"),
+                "title": st.column_config.TextColumn("Title"),
+                "status": st.column_config.TextColumn("Status"),
+                "ats_score": st.column_config.TextColumn("ATS Score"),
+                "job_url": st.column_config.LinkColumn(
+                    "Job Posting",
+                    display_text="View Job ↗️",
+                    help="Click to view the original job posting"
+                ),
+                "created_at": st.column_config.DatetimeColumn(
+                    "Date Tracked",
+                    format="D MMM YYYY, HH:mm"
+                ),
             },
             use_container_width=True,
             hide_index=True
@@ -624,7 +657,7 @@ with tab3:
 
         st.divider()
 
-        # Application Detail & Status Updater
+        # Application Detail & Status Manager
         st.subheader("📝 Application Manager")
         
         job_options = {
