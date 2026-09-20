@@ -63,7 +63,7 @@ def tailor_resume(resume_text, job_description):
     Inject every missing tool and methodology into the appropriate category in "technical_skills". Reorder each category so tools mentioned in the JD appear FIRST. Keywords or methodology should not be more than 15 per category.
 
     STEP 5: PROFESSIONAL SUMMARY CUSTOMIZATION
-    Rewrite the summary (4-5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
+    Rewrite the summary (4–5 sentences max) to directly reflect the target role's exact title and core responsibilities. Highlight tech stack, years of experience, and business impact. Strip out ALL LaTeX symbols (like '$') and convert to plain text.
 
     You must output a single JSON object matching this exact structural schema:
     {{
@@ -123,31 +123,19 @@ def create_pdf(data):
         """
 
     # 2. Dynamically build Professional Experience HTML block
-    # FIX: The header (role/company/date) and the bullet list are now nested
-    # inside a SINGLE <td> of a SINGLE outer <tr>, instead of being split
-    # across two separate <tr> rows. xhtml2pdf's pagination engine evaluates
-    # "page-break-inside: avoid" and "-pdf-keep-with-next" independently when
-    # they're on different rows, which caused the header to render near the
-    # bottom of a page while the bullets got orphaned onto the next page,
-    # leaving a large blank gap. Making it one atomic cell forces pisa to
-    # either keep the whole job entry together or push the ENTIRE entry
-    # (header + bullets) to the next page as one unit.
+    # Note: Uses single <table> structure and -pdf-keep-with-next to prevent page break splits between title and bullets
     experience_html = ""
     for job in data.get('professional_experience', []):
-        bullets_html = "".join(
-            [f"<li style='margin-bottom: 2px; font-size: 10pt;'>{b}</li>" for b in job.get('bullets', [])]
-        )
+        bullets_html = "".join([f"<li style='margin-bottom: 2px; font-size: 10pt;'>{b}</li>" for b in job.get('bullets', [])])
         experience_html += f"""
         <table style="width: 100%; margin-top: 6px; margin-bottom: 8px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
+            <tr style="-pdf-keep-with-next: true;">
+                <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
+                <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
+            </tr>
             <tr>
-                <td style="width: 100%;">
-                    <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                        <tr>
-                            <td style="font-weight: bold; font-size: 10pt; width: 60%;">{job.get('role')}, {job.get('company')}</td>
-                            <td style="text-align: right; font-style: italic; font-size: 10pt; width: 40%;">{job.get('date')} | {job.get('location')}</td>
-                        </tr>
-                    </table>
-                    <ul style="margin-top: 2px; margin-bottom: 4px; padding-left: 20px;">
+                <td colspan="2" style="padding-top: 2px;">
+                    <ul style="margin-top: 0px; margin-bottom: 4px; padding-left: 20px;">
                         {bullets_html}
                     </ul>
                 </td>
