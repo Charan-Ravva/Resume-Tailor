@@ -34,6 +34,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # --- SUPABASE CONFIGURATION ---
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+PROXY_URL = st.secrets.get("PROXY_URL", "")  # Optional proxy string (e.g. "http://user:pass@ip:port")
 
 
 @st.cache_resource
@@ -65,7 +66,6 @@ def save_application_supabase(
 
     pdf_filename = f"{job_id}.pdf"
 
-    # 1. Upload PDF binary to 'resumes' bucket
     try:
         supabase_client.storage.from_("resumes").upload(
             path=pdf_filename,
@@ -75,7 +75,6 @@ def save_application_supabase(
     except Exception as e:
         st.warning(f"Note on PDF Storage upload: {e}")
 
-    # 2. Insert/Upsert record in 'applications' table
     data = {
         "job_id": job_id,
         "company": company,
@@ -488,11 +487,12 @@ with tab1:
             "Scraping live listings from the"
             f" {selected_timeframe.lower()}..."
         ):
-            try:
-                # 1. Scrape standard platforms using JobSpy if installed
-                df_jobspy = pd.DataFrame()
-                if JOBSPY_AVAILABLE:
-                    # Dynamically inspect scrape_jobs parameters to ensure cross-version compatibility
+            df_jobspy = pd.DataFrame()
+            df_ats = pd.DataFrame()
+
+            # 1. Scrape standard platforms using JobSpy safely
+            if JOBSPY_AVAILABLE:
+                try:
                     sig = inspect.signature(scrape_jobs)
                     jobspy_args = {}
 
@@ -503,66 +503,67 @@ with tab1:
                         "results_wanted": results_num,
                         "country_indeed": "USA",
                         "hours_old": selected_hours,
-                        "linkedin_fetch_description": True,
+                        "proxies": [PROXY_URL] if PROXY_URL else None,
                     }
 
-                    # Include only arguments supported by the installed JobSpy version
                     for key, val in candidate_args.items():
-                        if key in sig.parameters:
+                        if key in sig.parameters and val is not None:
                             jobspy_args[key] = val
 
                     df_jobspy = scrape_jobs(**jobspy_args)
-                else:
-                    st.error(
-                        "The `python-jobspy` package is not installed. Run `pip"
-                        " install python-jobspy` or add it to"
-                        " `requirements.txt`."
-                    )
+                except Exception as jobspy_err:
+                    if "403" in str(jobspy_err):
+                        st.warning(
+                            "⚠️ Platform scrapers hit rate limits or Cloudflare blocks (403 Forbidden). "
+                            "Falling back to direct employer portals."
+                        )
+                    else:
+                        st.warning(f"Platform scraper notice: {jobspy_err}")
+            else:
+                st.error("The `python-jobspy` package is not installed.")
 
-                # 2. Scrape direct ATS portals
-                df_ats = pd.DataFrame()
-                if include_direct_ats:
+            # 2. Scrape direct ATS portals
+            if include_direct_ats:
+                try:
                     df_ats = search_direct_ats(
                         job_title=search_term,
                         location=location,
                         max_results=results_num,
                     )
+                except Exception as ats_err:
+                    st.warning(f"Direct portal search notice: {ats_err}")
 
-                # 3. Merge and deduplicate current search results
-                final_jobs_df = merge_and_deduplicate_jobs([df_ats, df_jobspy])
+            # 3. Merge and deduplicate current search results
+            final_jobs_df = merge_and_deduplicate_jobs([df_ats, df_jobspy])
 
-                # 4. Filter out jobs already saved in Supabase tracker
-                tracked_apps = fetch_all_applications_supabase()
-                if not tracked_apps.empty and not final_jobs_df.empty:
-                    tracked_keys = set(
-                        tracked_apps["company"].apply(normalize_text)
-                        + "_"
-                        + tracked_apps["title"].apply(normalize_text)
-                    )
+            # 4. Filter out jobs already saved in Supabase tracker
+            tracked_apps = fetch_all_applications_supabase()
+            if not tracked_apps.empty and not final_jobs_df.empty:
+                tracked_keys = set(
+                    tracked_apps["company"].apply(normalize_text)
+                    + "_"
+                    + tracked_apps["title"].apply(normalize_text)
+                )
 
-                    final_jobs_df["check_key"] = (
-                        final_jobs_df["company"].apply(normalize_text)
-                        + "_"
-                        + final_jobs_df["title"].apply(normalize_text)
-                    )
+                final_jobs_df["check_key"] = (
+                    final_jobs_df["company"].apply(normalize_text)
+                    + "_"
+                    + final_jobs_df["title"].apply(normalize_text)
+                )
 
-                    final_jobs_df = final_jobs_df[
-                        ~final_jobs_df["check_key"].isin(tracked_keys)
-                    ]
-                    final_jobs_df = final_jobs_df.drop(columns=["check_key"])
+                final_jobs_df = final_jobs_df[
+                    ~final_jobs_df["check_key"].isin(tracked_keys)
+                ]
+                final_jobs_df = final_jobs_df.drop(columns=["check_key"])
 
-                if not final_jobs_df.empty:
-                    st.session_state.jobs_df = final_jobs_df
-                    st.success(
-                        f"Found {len(final_jobs_df)} fresh, un-tracked jobs!"
-                    )
-                else:
-                    st.warning(
-                        "No new untracked jobs found matching your criteria"
-                        f" within the {selected_timeframe.lower()}."
-                    )
-            except Exception as err:
-                st.error(f"Error executing scraper: {err}")
+            if not final_jobs_df.empty:
+                st.session_state.jobs_df = final_jobs_df
+                st.success(f"Found {len(final_jobs_df)} fresh, un-tracked jobs!")
+            else:
+                st.warning(
+                    "No new untracked jobs found matching your criteria"
+                    f" within the {selected_timeframe.lower()}."
+                )
 
     # Render results table
     if "jobs_df" in st.session_state and not st.session_state.jobs_df.empty:
@@ -650,9 +651,7 @@ with tab1:
                     selected_row.get("description", "No description available.")
                 )
         else:
-            st.info(
-                "👆 Click on any job row above to select it for auto-fill."
-            )
+            st.info("👆 Click on any job row above to select it for auto-fill.")
 
 
 # ==========================================
@@ -699,9 +698,7 @@ with tab2:
                         st.success("Resume Tailored and Formatted Successfully!")
                         st.metric(
                             label="Estimated ATS Match Score",
-                            value=result_data.get(
-                                "estimated_ats_score", "N/A"
-                            ),
+                            value=result_data.get("estimated_ats_score", "N/A"),
                         )
                         st.info(
                             "**Optimization Summary:**"
@@ -724,7 +721,6 @@ with tab2:
                                     )
                                 )
 
-                        # FORMAT FILENAME STRICTLY AS Sri_charan_ravva_<company_name>.pdf
                         clean_company = (
                             re.sub(
                                 r"[^a-zA-Z0-9]",
@@ -742,14 +738,12 @@ with tab2:
                             f"Sri_charan_ravva_{clean_company}.pdf"
                         )
 
-                        # Retrieve or fallback title for database storing
                         stored_title = (
                             st.session_state.get("selected_title")
                             or "Target Role"
                         )
                         job_id = f"{clean_company}_{re.sub(r'[^a-zA-Z0-9]', '_', stored_title.lower())}"
 
-                        # Save record and upload PDF to Supabase
                         save_success = save_application_supabase(
                             job_id=job_id,
                             company=company_name or "Target Company",
@@ -813,7 +807,6 @@ with tab3:
             " tracker!"
         )
     else:
-        # Metrics Row
         col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
         col_m1.metric("Total Tracked", len(apps_df))
         col_m2.metric("Applied", len(apps_df[apps_df["status"] == "Applied"]))
@@ -835,7 +828,6 @@ with tab3:
 
         st.divider()
 
-        # Status Filter
         col_f1, col_f2 = st.columns([1, 3])
         with col_f1:
             status_filter = st.selectbox(
@@ -856,7 +848,6 @@ with tab3:
             else apps_df[apps_df["status"] == status_filter]
         )
 
-        # Applications Table with LinkColumn
         st.dataframe(
             filtered_df[[
                 "company",
@@ -886,7 +877,6 @@ with tab3:
 
         st.divider()
 
-        # Application Detail & Status Manager
         st.subheader("📝 Application Manager")
 
         job_options = {
