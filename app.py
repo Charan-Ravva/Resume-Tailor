@@ -12,9 +12,9 @@ from supabase import create_client, Client
 
 # DuckDuckGo fallback import handling
 try:
-    from ddgs import DDGS
+  from ddgs import DDGS
 except ImportError:
-    from duckduckgo_search import DDGS
+  from duckduckgo_search import DDGS
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
