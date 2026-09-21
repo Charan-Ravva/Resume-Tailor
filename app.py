@@ -1,18 +1,17 @@
 import io
 import json
 import re
-from google import genai
-from google.genai import types
 import pandas as pd
 import PyPDF2
 import streamlit as st
-from supabase import Client, create_client
+from google import genai
+from google.genai import types
 from xhtml2pdf import pisa
+from supabase import create_client, Client
 
 # Safe import for jobspy
 try:
     from jobspy import scrape_jobs
-
     JOBSPY_AVAILABLE = True
 except ImportError:
     JOBSPY_AVAILABLE = False
@@ -47,17 +46,7 @@ supabase_client = get_supabase_client()
 
 
 # --- SUPABASE DATABASE & STORAGE HELPERS ---
-def save_application_supabase(
-    job_id,
-    company,
-    title,
-    location,
-    job_url,
-    ats_score,
-    status,
-    notes,
-    pdf_bytes,
-):
+def save_application_supabase(job_id, company, title, location, job_url, ats_score, status, notes, pdf_bytes):
     """Saves application record to Supabase Postgres and uploads PDF to Storage."""
     if not supabase_client:
         return False
@@ -69,7 +58,7 @@ def save_application_supabase(
         supabase_client.storage.from_("resumes").upload(
             path=pdf_filename,
             file=pdf_bytes,
-            file_options={"content-type": "application/pdf", "upsert": "true"},
+            file_options={"content-type": "application/pdf", "upsert": "true"}
         )
     except Exception as e:
         st.warning(f"Note on PDF Storage upload: {e}")
@@ -84,7 +73,7 @@ def save_application_supabase(
         "ats_score": str(ats_score),
         "status": status,
         "notes": notes,
-        "pdf_path": pdf_filename,
+        "pdf_path": pdf_filename
     }
 
     supabase_client.table("applications").upsert(data).execute()
@@ -95,12 +84,7 @@ def fetch_all_applications_supabase():
     """Fetches all applications from Supabase ordered by date created."""
     if not supabase_client:
         return pd.DataFrame()
-    res = (
-        supabase_client.table("applications")
-        .select("*")
-        .order("created_at", desc=True)
-        .execute()
-    )
+    res = supabase_client.table("applications").select("*").order("created_at", desc=True).execute()
     return pd.DataFrame(res.data) if res.data else pd.DataFrame()
 
 
@@ -119,18 +103,14 @@ def update_application_status_supabase(job_id, status, notes):
     """Updates status and notes for a specific job application."""
     if not supabase_client:
         return
-    supabase_client.table("applications").update(
-        {"status": status, "notes": notes}
-    ).eq("job_id", job_id).execute()
+    supabase_client.table("applications").update({"status": status, "notes": notes}).eq("job_id", job_id).execute()
 
 
 def delete_application_supabase(job_id, pdf_filename):
     """Deletes an application record and its PDF from Supabase."""
     if not supabase_client:
         return
-    supabase_client.table("applications").delete().eq(
-        "job_id", job_id
-    ).execute()
+    supabase_client.table("applications").delete().eq("job_id", job_id).execute()
     if pdf_filename:
         try:
             supabase_client.storage.from_("resumes").remove([pdf_filename])
@@ -145,7 +125,7 @@ def search_direct_ats(job_title, location="United States", max_results=20):
         return pd.DataFrame()
 
     ats_query = f'("{job_title}") ("{location}") (site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com)'
-
+    
     jobs = []
     try:
         with DDGS() as ddgs:
@@ -165,19 +145,15 @@ def search_direct_ats(job_title, location="United States", max_results=20):
                 jobs.append({
                     "site": platform,
                     "title": item.get("title", "").split(" - ")[0],
-                    "company": (
-                        item.get("title", "").split(" - ")[-1]
-                        if " - " in item.get("title", "")
-                        else "Direct Employer"
-                    ),
+                    "company": item.get("title", "").split(" - ")[-1] if " - " in item.get("title", "") else "Direct Employer",
                     "location": location,
                     "job_url": url,
                     "description": item.get("body", ""),
-                    "date_posted": "Recent",
+                    "date_posted": "Recent"
                 })
     except Exception as e:
         st.warning(f"Note on direct portal search: {e}")
-
+        
     return pd.DataFrame(jobs)
 
 
@@ -185,44 +161,31 @@ def normalize_text(text):
     """Normalizes strings for duplicate matching."""
     if not isinstance(text, str):
         return ""
-    return re.sub(r"[^a-zA-Z0-9]", "", text.lower())
+    return re.sub(r'[^a-zA-Z0-9]', '', text.lower())
 
 
 def merge_and_deduplicate_jobs(df_list):
     """Combines DataFrames and removes duplicate postings based on Company + Title."""
-    valid_dfs = [
-        df for df in df_list if isinstance(df, pd.DataFrame) and not df.empty
-    ]
+    valid_dfs = [df for df in df_list if isinstance(df, pd.DataFrame) and not df.empty]
     if not valid_dfs:
         return pd.DataFrame()
-
+        
     combined_df = pd.concat(valid_dfs, ignore_index=True)
 
     combined_df["dedup_key"] = (
-        combined_df["company"].apply(normalize_text)
-        + "_"
-        + combined_df["title"].apply(normalize_text)
+        combined_df["company"].apply(normalize_text) + "_" + 
+        combined_df["title"].apply(normalize_text)
     )
 
     platform_priority = {
-        "Greenhouse": 1,
-        "Lever": 2,
-        "Ashby": 3,
-        "Workday": 4,
-        "linkedin": 5,
-        "indeed": 6,
-        "zip_recruiter": 7,
-        "glassdoor": 8,
+        "Greenhouse": 1, "Lever": 2, "Ashby": 3, "Workday": 4, 
+        "linkedin": 5, "indeed": 6, "zip_recruiter": 7, "glassdoor": 8
     }
-    combined_df["priority"] = combined_df["site"].map(
-        lambda x: platform_priority.get(x, 99)
-    )
-
+    combined_df["priority"] = combined_df["site"].map(lambda x: platform_priority.get(x, 99))
+    
     combined_df = combined_df.sort_values(by="priority")
     deduped_df = combined_df.drop_duplicates(subset=["dedup_key"], keep="first")
-    deduped_df = deduped_df.drop(
-        columns=["dedup_key", "priority"], errors="ignore"
-    )
+    deduped_df = deduped_df.drop(columns=["dedup_key", "priority"], errors="ignore")
 
     return deduped_df
 
@@ -332,14 +295,8 @@ def tailor_resume(resume_text, job_description):
 
 def create_pdf(data):
     """Compiles JSON data structure into formatted PDF file."""
-    linkedin_raw = data["contact"].get(
-        "linkedin", "www.linkedin.com/in/charanravva"
-    )
-    linkedin_url = (
-        linkedin_raw
-        if linkedin_raw.startswith("http")
-        else f"https://{linkedin_raw}"
-    )
+    linkedin_raw = data["contact"].get("linkedin", "www.linkedin.com/in/charanravva")
+    linkedin_url = linkedin_raw if linkedin_raw.startswith("http") else f"https://{linkedin_raw}"
     linkedin_html = f'<a href="{linkedin_url}">{linkedin_raw}</a>'
 
     skills_html = ""
@@ -434,9 +391,9 @@ def create_pdf(data):
 st.set_page_config(page_title="AI Resume Tailor & Job Tracker", layout="wide")
 
 tab1, tab2, tab3 = st.tabs([
-    "🔍 Job Scraper",
-    "🎯 Resume Tailor",
-    "📊 Application Tracker Dashboard",
+    "🔍 Job Scraper", 
+    "🎯 Resume Tailor", 
+    "📊 Application Tracker Dashboard"
 ])
 
 # ==========================================
@@ -454,19 +411,17 @@ with tab1:
 
     col_a, col_b, col_c, col_d = st.columns([2, 1.5, 1.5, 1])
     with col_a:
-        search_term = st.text_input(
-            "Job Title Query", value="Marketing Analyst"
-        )
+        search_term = st.text_input("Job Title Query", value="Marketing Analyst")
     with col_b:
         location = st.text_input("Location", value="United States")
     with col_c:
         selected_timeframe = st.selectbox(
-            "Date Posted", options=list(timeframe_map.keys()), index=0
+            "Date Posted",
+            options=list(timeframe_map.keys()),
+            index=0
         )
     with col_d:
-        results_num = st.number_input(
-            "Max Results", min_value=10, max_value=100, value=25
-        )
+        results_num = st.number_input("Max Results", min_value=10, max_value=100, value=25)
 
     col_s1, col_s2 = st.columns([3, 1])
     with col_s1:
@@ -476,17 +431,12 @@ with tab1:
             default=["linkedin", "indeed"],
         )
     with col_s2:
-        include_direct_ats = st.checkbox(
-            "Include Direct Portals (Greenhouse, Lever)", value=True
-        )
+        include_direct_ats = st.checkbox("Include Direct Portals (Greenhouse, Lever)", value=True)
 
     if st.button("Search Fresh Postings", type="primary"):
         selected_hours = timeframe_map[selected_timeframe]
 
-        with st.spinner(
-            "Scraping live listings from the"
-            f" {selected_timeframe.lower()}..."
-        ):
+        with st.spinner(f"Scraping live listings from the {selected_timeframe.lower()}..."):
             try:
                 # 1. Scrape standard platforms using JobSpy if installed
                 df_jobspy = pd.DataFrame()
@@ -501,11 +451,7 @@ with tab1:
                         linkedin_fetch_description=True,
                     )
                 else:
-                    st.error(
-                        "The `python-jobspy` package is not installed. Please"
-                        " run `pip install python-jobspy` or add it to your"
-                        " `requirements.txt`."
-                    )
+                    st.error("The `python-jobspy` package is not installed. Run `pip install python-jobspy` or add it to `requirements.txt`.")
 
                 # 2. Scrape direct ATS portals
                 df_ats = pd.DataFrame()
@@ -513,7 +459,7 @@ with tab1:
                     df_ats = search_direct_ats(
                         job_title=search_term,
                         location=location,
-                        max_results=results_num,
+                        max_results=results_num
                     )
 
                 # 3. Merge and deduplicate current search results
@@ -523,32 +469,23 @@ with tab1:
                 tracked_apps = fetch_all_applications_supabase()
                 if not tracked_apps.empty and not final_jobs_df.empty:
                     tracked_keys = set(
-                        tracked_apps["company"].apply(normalize_text)
-                        + "_"
-                        + tracked_apps["title"].apply(normalize_text)
+                        tracked_apps["company"].apply(normalize_text) + "_" + 
+                        tracked_apps["title"].apply(normalize_text)
                     )
-
+                    
                     final_jobs_df["check_key"] = (
-                        final_jobs_df["company"].apply(normalize_text)
-                        + "_"
-                        + final_jobs_df["title"].apply(normalize_text)
+                        final_jobs_df["company"].apply(normalize_text) + "_" + 
+                        final_jobs_df["title"].apply(normalize_text)
                     )
-
-                    final_jobs_df = final_jobs_df[
-                        ~final_jobs_df["check_key"].isin(tracked_keys)
-                    ]
+                    
+                    final_jobs_df = final_jobs_df[~final_jobs_df["check_key"].isin(tracked_keys)]
                     final_jobs_df = final_jobs_df.drop(columns=["check_key"])
 
                 if not final_jobs_df.empty:
                     st.session_state.jobs_df = final_jobs_df
-                    st.success(
-                        f"Found {len(final_jobs_df)} fresh, un-tracked jobs!"
-                    )
+                    st.success(f"Found {len(final_jobs_df)} fresh, un-tracked jobs!")
                 else:
-                    st.warning(
-                        "No new untracked jobs found matching your criteria"
-                        f" within the {selected_timeframe.lower()}."
-                    )
+                    st.warning(f"No new untracked jobs found matching your criteria within the {selected_timeframe.lower()}.")
             except Exception as err:
                 st.error(f"Error executing scraper: {err}")
 
@@ -556,25 +493,15 @@ with tab1:
     if "jobs_df" in st.session_state and not st.session_state.jobs_df.empty:
         df = st.session_state.jobs_df
 
-        st.caption(
-            "💡 **Tip:** Click the **Apply ↗️** link to view the job, or click"
-            " anywhere on a row to select and import it."
-        )
+        st.caption("💡 **Tip:** Click the **Apply ↗️** link to view the job, or click anywhere on a row to select and import it.")
 
         event = st.dataframe(
-            df[[
-                "site",
-                "title",
-                "company",
-                "location",
-                "date_posted",
-                "job_url",
-            ]],
+            df[["site", "title", "company", "location", "date_posted", "job_url"]],
             column_config={
                 "job_url": st.column_config.LinkColumn(
                     "Apply",
                     display_text="Apply ↗️",
-                    help="Click to open application page",
+                    help="Click to open application page"
                 ),
                 "site": st.column_config.TextColumn("Platform"),
                 "title": st.column_config.TextColumn("Job Title"),
@@ -585,7 +512,7 @@ with tab1:
             on_select="rerun",
             selection_mode="single-row",
             use_container_width=True,
-            hide_index=True,
+            hide_index=True
         )
 
         selected_rows = event.selection.get("rows", [])
@@ -595,52 +522,24 @@ with tab1:
             selected_row = df.iloc[selected_index]
 
             st.markdown("---")
-            st.markdown(
-                f"### Selected: **{selected_row['title']}** at"
-                f" **{selected_row['company']}**"
-            )
+            st.markdown(f"### Selected: **{selected_row['title']}** at **{selected_row['company']}**")
 
             col_act1, col_act2 = st.columns([1, 2])
             with col_act1:
-                st.link_button(
-                    "🔗 Open Job Page",
-                    selected_row["job_url"],
-                    use_container_width=True,
-                )
+                st.link_button("🔗 Open Job Page", selected_row["job_url"], use_container_width=True)
             with col_act2:
-                if st.button(
-                    "➡️ Import Description into Resume Tailor",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    st.session_state.selected_jd = selected_row.get(
-                        "description", ""
-                    )
-                    st.session_state.selected_company = selected_row.get(
-                        "company", ""
-                    )
-                    st.session_state.selected_title = selected_row.get(
-                        "title", ""
-                    )
-                    st.session_state.selected_location = selected_row.get(
-                        "location", ""
-                    )
-                    st.session_state.selected_job_url = selected_row.get(
-                        "job_url", ""
-                    )
-                    st.toast(
-                        "Job imported! Switch to the Resume Tailor tab.",
-                        icon="🎯",
-                    )
+                if st.button("➡️ Import Description into Resume Tailor", type="primary", use_container_width=True):
+                    st.session_state.selected_jd = selected_row.get("description", "")
+                    st.session_state.selected_company = selected_row.get("company", "")
+                    st.session_state.selected_title = selected_row.get("title", "")
+                    st.session_state.selected_location = selected_row.get("location", "")
+                    st.session_state.selected_job_url = selected_row.get("job_url", "")
+                    st.toast("Job imported! Switch to the Resume Tailor tab.", icon="🎯")
 
             with st.expander("Preview Full Job Description"):
-                st.write(
-                    selected_row.get("description", "No description available.")
-                )
+                st.write(selected_row.get("description", "No description available."))
         else:
-            st.info(
-                "👆 Click on any job row above to select it for auto-fill."
-            )
+            st.info("👆 Click on any job row above to select it for auto-fill.")
 
 
 # ==========================================
@@ -648,10 +547,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.header("🎯 AI Resume Tailor")
-    st.write(
-        "Upload a base resume, review or edit the target job description, and"
-        " generate your optimized PDF."
-    )
+    st.write("Upload a base resume, review or edit the target job description, and generate your optimized PDF.")
 
     col1, col2 = st.columns(2)
 
@@ -674,10 +570,7 @@ with tab2:
 
     if st.button("Tailor My Resume", type="primary", use_container_width=True):
         if uploaded_resume and job_description:
-            with st.spinner(
-                "Analyzing data and generating your optimized resume"
-                " document..."
-            ):
+            with st.spinner("Analyzing data and generating your optimized resume document..."):
                 try:
                     base_text = extract_text_from_pdf(uploaded_resume)
                     result_data = tailor_resume(base_text, job_description)
@@ -687,54 +580,26 @@ with tab2:
                         st.success("Resume Tailored and Formatted Successfully!")
                         st.metric(
                             label="Estimated ATS Match Score",
-                            value=result_data.get(
-                                "estimated_ats_score", "N/A"
-                            ),
+                            value=result_data.get("estimated_ats_score", "N/A"),
                         )
-                        st.info(
-                            "**Optimization Summary:**"
-                            f" {result_data.get('explanation', '')}"
-                        )
+                        st.info(f"**Optimization Summary:** {result_data.get('explanation', '')}")
 
                         colA, colB = st.columns(2)
                         with colA:
                             with st.expander("✅ Keywords Integrated"):
-                                st.write(
-                                    ", ".join(
-                                        result_data.get("added_keywords", [])
-                                    )
-                                )
+                                st.write(", ".join(result_data.get("added_keywords", [])))
                         with colB:
                             with st.expander("❌ Omitted Keywords"):
-                                st.write(
-                                    ", ".join(
-                                        result_data.get("missing_keywords", [])
-                                    )
-                                )
+                                st.write(", ".join(result_data.get("missing_keywords", [])))
 
                         # FORMAT FILENAME STRICTLY AS Sri_charan_ravva_<company_name>.pdf
-                        clean_company = (
-                            re.sub(
-                                r"[^a-zA-Z0-9]",
-                                "_",
-                                company_name.strip().lower(),
-                            )
-                            if company_name
-                            else "company"
-                        )
-                        clean_company = re.sub(
-                            r"_+", "_", clean_company
-                        ).strip("_")
+                        clean_company = re.sub(r'[^a-zA-Z0-9]', '_', company_name.strip().lower()) if company_name else "company"
+                        clean_company = re.sub(r'_+', '_', clean_company).strip('_')
 
-                        download_filename = (
-                            f"Sri_charan_ravva_{clean_company}.pdf"
-                        )
+                        download_filename = f"Sri_charan_ravva_{clean_company}.pdf"
 
                         # Retrieve or fallback title for database storing
-                        stored_title = (
-                            st.session_state.get("selected_title")
-                            or "Target Role"
-                        )
+                        stored_title = st.session_state.get("selected_title") or "Target Role"
                         job_id = f"{clean_company}_{re.sub(r'[^a-zA-Z0-9]', '_', stored_title.lower())}"
 
                         # Save record and upload PDF to Supabase
@@ -742,24 +607,15 @@ with tab2:
                             job_id=job_id,
                             company=company_name or "Target Company",
                             title=stored_title,
-                            location=st.session_state.get(
-                                "selected_location", "USA"
-                            ),
-                            job_url=st.session_state.get(
-                                "selected_job_url", ""
-                            ),
-                            ats_score=result_data.get(
-                                "estimated_ats_score", "N/A"
-                            ),
+                            location=st.session_state.get("selected_location", "USA"),
+                            job_url=st.session_state.get("selected_job_url", ""),
+                            ats_score=result_data.get("estimated_ats_score", "N/A"),
                             status="Tailored",
                             notes=result_data.get("explanation", ""),
-                            pdf_bytes=pdf_buffer.getvalue(),
+                            pdf_bytes=pdf_buffer.getvalue()
                         )
                         if save_success:
-                            st.toast(
-                                "Saved application record and PDF to Supabase!",
-                                icon="☁️",
-                            )
+                            st.toast("Saved application record and PDF to Supabase!", icon="☁️")
 
                         st.download_button(
                             label="⬇️ Download Optimized Resume (.pdf)",
@@ -769,18 +625,12 @@ with tab2:
                             type="primary",
                         )
                     else:
-                        st.error(
-                            "The PDF rendering engine encountered a layout"
-                            " error processing the generated text."
-                        )
+                        st.error("The PDF rendering engine encountered a layout error processing the generated text.")
 
                 except Exception as e:
                     st.error(f"An error occurred during runtime processing: {e}")
         else:
-            st.warning(
-                "Please make sure you have uploaded a resume file and provided a"
-                " target job description."
-            )
+            st.warning("Please make sure you have uploaded a resume file and provided a target job description.")
 
 
 # ==========================================
@@ -788,37 +638,22 @@ with tab2:
 # ==========================================
 with tab3:
     st.header("📊 Application Tracker Dashboard")
-    st.caption(
-        "Manage your job hunt, track application progress, download tailored"
-        " resumes, and save interview notes."
-    )
+    st.caption("Manage your job hunt, track application progress, download tailored resumes, and save interview notes.")
 
     apps_df = fetch_all_applications_supabase()
 
     if apps_df.empty:
-        st.info(
-            "No applications tracked yet. Tailor a resume to populate this"
-            " tracker!"
-        )
+        st.info("No applications tracked yet. Tailor a resume to populate this tracker!")
     else:
         # Metrics Row
         col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
         col_m1.metric("Total Tracked", len(apps_df))
         col_m2.metric("Applied", len(apps_df[apps_df["status"] == "Applied"]))
-        col_m3.metric(
-            "Interviewing 🎯",
-            len(apps_df[apps_df["status"] == "Interviewing"]),
-        )
+        col_m3.metric("Interviewing 🎯", len(apps_df[apps_df["status"] == "Interviewing"]))
         col_m4.metric("Offers 🍾", len(apps_df[apps_df["status"] == "Offer"]))
-
-        ats_numeric = pd.to_numeric(
-            apps_df["ats_score"].astype(str).str.rstrip("%"), errors="coerce"
-        )
-        avg_ats = (
-            f"{ats_numeric.mean():.1f}%"
-            if not ats_numeric.isna().all()
-            else "N/A"
-        )
+        
+        ats_numeric = pd.to_numeric(apps_df['ats_score'].astype(str).str.rstrip('%'), errors='coerce')
+        avg_ats = f"{ats_numeric.mean():.1f}%" if not ats_numeric.isna().all() else "N/A"
         col_m5.metric("Avg ATS Match", avg_ats)
 
         st.divider()
@@ -828,32 +663,14 @@ with tab3:
         with col_f1:
             status_filter = st.selectbox(
                 "Filter by Status:",
-                options=[
-                    "All",
-                    "Tailored",
-                    "Applied",
-                    "Interviewing",
-                    "Offer",
-                    "Rejected",
-                ],
+                options=["All", "Tailored", "Applied", "Interviewing", "Offer", "Rejected"]
             )
-
-        filtered_df = (
-            apps_df
-            if status_filter == "All"
-            else apps_df[apps_df["status"] == status_filter]
-        )
+        
+        filtered_df = apps_df if status_filter == "All" else apps_df[apps_df["status"] == status_filter]
 
         # Applications Table with LinkColumn
         st.dataframe(
-            filtered_df[[
-                "company",
-                "title",
-                "status",
-                "ats_score",
-                "job_url",
-                "created_at",
-            ]],
+            filtered_df[["company", "title", "status", "ats_score", "job_url", "created_at"]],
             column_config={
                 "company": st.column_config.TextColumn("Company"),
                 "title": st.column_config.TextColumn("Title"),
@@ -862,31 +679,30 @@ with tab3:
                 "job_url": st.column_config.LinkColumn(
                     "Job Posting",
                     display_text="View Job ↗️",
-                    help="Click to view the original job posting",
+                    help="Click to view the original job posting"
                 ),
                 "created_at": st.column_config.DatetimeColumn(
-                    "Date Tracked", format="D MMM YYYY, HH:mm"
+                    "Date Tracked",
+                    format="D MMM YYYY, HH:mm"
                 ),
             },
             use_container_width=True,
-            hide_index=True,
+            hide_index=True
         )
 
         st.divider()
 
         # Application Detail & Status Manager
         st.subheader("📝 Application Manager")
-
+        
         job_options = {
-            f"{row['company']} - {row['title']} ({row['status']})": row["job_id"]
+            f"{row['company']} - {row['title']} ({row['status']})": row['job_id']
             for _, row in apps_df.iterrows()
         }
-
-        selected_label = st.selectbox(
-            "Select an application to manage:", list(job_options.keys())
-        )
+        
+        selected_label = st.selectbox("Select an application to manage:", list(job_options.keys()))
         selected_id = job_options[selected_label]
-
+        
         app = apps_df[apps_df["job_id"] == selected_id].iloc[0]
 
         col_d1, col_d2 = st.columns([2, 1])
@@ -897,68 +713,36 @@ with tab3:
                 st.link_button("🔗 Open Original Job Posting", app["job_url"])
 
             with st.form(f"update_form_{app['job_id']}"):
-                current_status = (
-                    app["status"]
-                    if app["status"]
-                    in ["Tailored", "Applied", "Interviewing", "Offer", "Rejected"]
-                    else "Tailored"
-                )
+                current_status = app["status"] if app["status"] in ["Tailored", "Applied", "Interviewing", "Offer", "Rejected"] else "Tailored"
                 new_status = st.selectbox(
                     "Update Status:",
-                    options=[
-                        "Tailored",
-                        "Applied",
-                        "Interviewing",
-                        "Offer",
-                        "Rejected",
-                    ],
-                    index=[
-                        "Tailored",
-                        "Applied",
-                        "Interviewing",
-                        "Offer",
-                        "Rejected",
-                    ].index(current_status),
+                    options=["Tailored", "Applied", "Interviewing", "Offer", "Rejected"],
+                    index=["Tailored", "Applied", "Interviewing", "Offer", "Rejected"].index(current_status)
                 )
-
-                new_notes = st.text_area(
-                    "Notes (Recruiter contacts, call dates, follow-up actions):",
-                    value=app["notes"] if app["notes"] else "",
-                )
-
+                
+                new_notes = st.text_area("Notes (Recruiter contacts, call dates, follow-up actions):", value=app["notes"] if app["notes"] else "")
+                
                 if st.form_submit_button("💾 Save Status & Notes"):
-                    update_application_status_supabase(
-                        app["job_id"], new_status, new_notes
-                    )
+                    update_application_status_supabase(app["job_id"], new_status, new_notes)
                     st.toast("Application status updated!", icon="✅")
                     st.rerun()
 
         with col_d2:
             st.markdown("#### **Resume File**")
             st.info(f"**ATS Match Score:** {app['ats_score']}")
-
+            
             if app["pdf_path"]:
                 pdf_bytes = download_pdf_from_supabase(app["pdf_path"])
                 if pdf_bytes:
-                    clean_comp_name = (
-                        re.sub(
-                            r"[^a-zA-Z0-9]",
-                            "_",
-                            str(app["company"]).strip().lower(),
-                        )
-                        if app["company"]
-                        else "company"
-                    )
-                    clean_comp_name = re.sub(
-                        r"_+", "_", clean_comp_name
-                    ).strip("_")
+                    clean_comp_name = re.sub(r'[^a-zA-Z0-9]', '_', str(app["company"]).strip().lower()) if app["company"] else "company"
+                    clean_comp_name = re.sub(r'_+', '_', clean_comp_name).strip('_')
 
                     st.download_button(
                         label="⬇️ Retrieve Saved Resume PDF",
                         data=pdf_bytes,
                         file_name=f"Sri_charan_ravva_{clean_comp_name}.pdf",
                         mime="application/pdf",
-                        use_container_width=True,
+                        use_container_width=True
                     )
             else:
                 st.write("No PDF associated with this record.")
