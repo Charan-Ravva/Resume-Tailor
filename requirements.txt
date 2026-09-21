@@ -6,3 +6,4 @@ xhtml2pdf
 supabase
 duckduckgo-search
 python-jobspy
+python-jobspy>=1.1.50
