@@ -9,11 +9,22 @@ import streamlit as st
 from supabase import Client, create_client
 from xhtml2pdf import pisa
 
-# DuckDuckGo fallback import handling
+# Safe import for jobspy
+try:
+    from jobspy import scrape_jobs
+
+    JOBSPY_AVAILABLE = True
+except ImportError:
+    JOBSPY_AVAILABLE = False
+
+# Safe import for DuckDuckGo search fallback
 try:
     from ddgs import DDGS
 except ImportError:
-    from duckduckgo_search import DDGS
+    try:
+        from duckduckgo_search import DDGS
+    except ImportError:
+        DDGS = None
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
@@ -130,6 +141,9 @@ def delete_application_supabase(job_id, pdf_filename):
 # --- SEARCH & DEDUPLICATION HELPERS ---
 def search_direct_ats(job_title, location="United States", max_results=20):
     """Searches direct career portals (Greenhouse, Lever, Ashby, Workday) using DuckDuckGo."""
+    if DDGS is None:
+        return pd.DataFrame()
+
     ats_query = f'("{job_title}") ("{location}") (site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com)'
 
     jobs = []
@@ -474,18 +488,26 @@ with tab1:
             f" {selected_timeframe.lower()}..."
         ):
             try:
-                # 1. Scrape standard platforms using JobSpy
-                df_jobspy = scrape_jobs(
-                    site_name=boards,
-                    search_term=search_term,
-                    location=location,
-                    results_wanted=results_num,
-                    hours_old=selected_hours,
-                    country_indeed="USA",
-                    linkedin_fetch_description=True,
-                )
+                # 1. Scrape standard platforms using JobSpy if installed
+                df_jobspy = pd.DataFrame()
+                if JOBSPY_AVAILABLE:
+                    df_jobspy = scrape_jobs(
+                        site_name=boards,
+                        search_term=search_term,
+                        location=location,
+                        results_wanted=results_num,
+                        hours_old=selected_hours,
+                        country_indeed="USA",
+                        linkedin_fetch_description=True,
+                    )
+                else:
+                    st.error(
+                        "The `python-jobspy` package is not installed. Please"
+                        " run `pip install python-jobspy` or add it to your"
+                        " `requirements.txt`."
+                    )
 
-                # 2. Optionally scrape direct ATS portals
+                # 2. Scrape direct ATS portals
                 df_ats = pd.DataFrame()
                 if include_direct_ats:
                     df_ats = search_direct_ats(
@@ -918,10 +940,23 @@ with tab3:
             if app["pdf_path"]:
                 pdf_bytes = download_pdf_from_supabase(app["pdf_path"])
                 if pdf_bytes:
+                    clean_comp_name = (
+                        re.sub(
+                            r"[^a-zA-Z0-9]",
+                            "_",
+                            str(app["company"]).strip().lower(),
+                        )
+                        if app["company"]
+                        else "company"
+                    )
+                    clean_comp_name = re.sub(
+                        r"_+", "_", clean_comp_name
+                    ).strip("_")
+
                     st.download_button(
                         label="⬇️ Retrieve Saved Resume PDF",
                         data=pdf_bytes,
-                        file_name=f"Sri_charan_ravva_{app['company']}.pdf",
+                        file_name=f"Sri_charan_ravva_{clean_comp_name}.pdf",
                         mime="application/pdf",
                         use_container_width=True,
                     )
