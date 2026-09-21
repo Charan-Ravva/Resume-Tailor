@@ -3,6 +3,7 @@ import json
 import re
 from google import genai
 from google.genai import types
+from jobspy import scrape_jobs
 import pandas as pd
 import PyPDF2
 import streamlit as st
