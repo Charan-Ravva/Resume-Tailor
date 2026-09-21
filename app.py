@@ -492,19 +492,24 @@ with tab1:
                 # 1. Scrape standard platforms using JobSpy if installed
                 df_jobspy = pd.DataFrame()
                 if JOBSPY_AVAILABLE:
-                    jobspy_args = {
+                    # Dynamically inspect scrape_jobs parameters to ensure cross-version compatibility
+                    sig = inspect.signature(scrape_jobs)
+                    jobspy_args = {}
+
+                    candidate_args = {
                         "site_name": boards,
                         "search_term": search_term,
                         "location": location,
                         "results_wanted": results_num,
                         "country_indeed": "USA",
+                        "hours_old": selected_hours,
                         "linkedin_fetch_description": True,
                     }
 
-                    # Safely pass hours_old only if supported by installed JobSpy version
-                    sig = inspect.signature(scrape_jobs)
-                    if "hours_old" in sig.parameters:
-                        jobspy_args["hours_old"] = selected_hours
+                    # Include only arguments supported by the installed JobSpy version
+                    for key, val in candidate_args.items():
+                        if key in sig.parameters:
+                            jobspy_args[key] = val
 
                     df_jobspy = scrape_jobs(**jobspy_args)
                 else:
