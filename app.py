@@ -18,7 +18,12 @@ except ImportError:
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+# FIX: JSON mode requires the v1beta API version
+client = genai.Client(
+    api_key=GEMINI_API_KEY,
+    http_options=types.HttpOptions(api_version="v1beta"),
+)
 
 # --- SUPABASE CONFIGURATION ---
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
@@ -314,7 +319,18 @@ def tailor_resume(resume_text, job_description):
             response_mime_type="application/json", temperature=0.0
         ),
     )
-    return json.loads(response.text)
+
+    # Safety blocks or empty candidates can return None for response.text
+    if not response.text:
+        raise ValueError(
+            "Gemini returned an empty response. Try again or shorten the"
+            " job description."
+        )
+
+    # Defensively strip markdown code fences in case the model adds them
+    raw = response.text.strip()
+    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
+    return json.loads(raw)
 
 
 def create_pdf(data):
